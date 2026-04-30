@@ -47,8 +47,21 @@ from app.admin_views import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATABASE_PATH = PROJECT_ROOT / "data" / "fredcore.db"
 STATIC_DIR = PROJECT_ROOT / "static"
+_REPOSITORY_READY = False
+
+
+def resolve_database_path(project_root: Path) -> Path:
+    configured_path = os.environ.get("FREDCORE_DATABASE_PATH", "").strip()
+    if configured_path:
+        database_path = Path(configured_path)
+        return database_path if database_path.is_absolute() else project_root / database_path
+    if os.environ.get("VERCEL") == "1":
+        return Path("/tmp/fredcore.db")
+    return project_root / "data" / "fredcore.db"
+
+
+DATABASE_PATH = resolve_database_path(PROJECT_ROOT)
 REPOSITORY = AdminRepository(DATABASE_PATH)
 MONTH_KEY_PATTERN = re.compile(r"^\d{4}-\d{2}$")
 WATCHED_DIRECTORIES = ("app", "static", "config", "tests")
@@ -56,6 +69,15 @@ WATCHED_FILES = ("README.md", "requirements.txt", ".env.example")
 IGNORED_DIRECTORY_NAMES = {".git", ".venv", "__pycache__", ".pytest_cache", ".mypy_cache"}
 WATCHED_SUFFIXES = {".py", ".css", ".js", ".html", ".txt", ".md", ".json", ".png", ".svg"}
 RELOAD_POLL_SECONDS = 1.0
+
+
+def ensure_repository_ready() -> None:
+    global _REPOSITORY_READY
+    if _REPOSITORY_READY:
+        return
+    REPOSITORY.initialize()
+    REPOSITORY.seed_if_empty()
+    _REPOSITORY_READY = True
 
 
 def parse_form(environ) -> dict:
@@ -418,6 +440,7 @@ def fetch_linkable_accounts(
 
 
 def application(environ, start_response):
+    ensure_repository_ready()
     setup_testing_defaults(environ)
     path = environ.get("PATH_INFO", "/")
     method = environ.get("REQUEST_METHOD", "GET").upper()
@@ -1072,11 +1095,13 @@ def application(environ, start_response):
     return respond_html(start_response, b"Not Found", "404 Not Found")
 
 
+app = application
+
+
 def main() -> None:
     if os.environ.get("FREDCORE_RUN_MAIN") != "1":
         raise SystemExit(run_with_reloader())
-    REPOSITORY.initialize()
-    REPOSITORY.seed_if_empty()
+    ensure_repository_ready()
     with make_server("127.0.0.1", 8000, application) as server:
         print("FredCore admin UI: http://127.0.0.1:8000 (auto-reload enabled)")
         server.serve_forever()

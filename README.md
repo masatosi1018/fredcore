@@ -47,6 +47,35 @@ http://127.0.0.1:8000
 
 初回起動時に `data/fredcore.db` を作成し、スクリーンショットに寄せたサンプルデータを投入します。
 
+### Vercel について
+
+Vercel にデプロイする場合、Python の WSGI エントリポイントとしてルートの `wsgi.py` を使います。
+
+ただし、このプロジェクトは今 `SQLite` を前提にしているため、Vercel 上では永続ディスクを使えません。現状のままでは `FREDCORE_DATABASE_PATH` 未指定時に `/tmp/fredcore.db` を使うため、データはインスタンス再起動やスケール時に消える前提です。
+
+つまり現段階の Vercel デプロイは:
+
+- 画面表示や UI 確認には使える
+- 永続的な認証情報保存や OAuth state 保存には本番向きではない
+
+本番運用するなら、将来的に外部DBへ切り替える必要があります。
+
+Vercel で最低限そろえる値:
+
+- `FREDCORE_DATABASE_PATH=/tmp/fredcore.db` 省略可
+- `VERCEL=1` 自動付与
+- `FREDCORE_APP_BASE_URL=https://fredcore.vercel.app`
+
+よく使う Vercel Environment Variables:
+
+- `FREDCORE_APP_BASE_URL`
+- `META_APP_ID`
+- `META_APP_SECRET`
+- `META_ACCESS_TOKEN`
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `GOOGLE_SERVICE_ACCOUNT_FILE` または将来的な外部シークレット管理
+
 ## 2. 画面
 
 ### アカウント連携
