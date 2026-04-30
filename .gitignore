@@ -1,0 +1,8 @@
+.env
+.venv/
+__pycache__/
+.pycache/
+*.pyc
+config/google-service-account.json
+logs/*.log
+data/*.db
