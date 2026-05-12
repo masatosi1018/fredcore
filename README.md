@@ -49,9 +49,9 @@ http://127.0.0.1:8000
 
 ### Vercel について
 
-Vercel にデプロイする場合、Python の WSGI エントリポイントとしてルートの `wsgi.py` を使います。
+Vercel にデプロイする場合、Python の WSGI エントリポイントとしてルートの `server.py` を使います。
 
-Vercel の Python Runtime は、2026年3月17日更新の公式ドキュメント時点で、トップレベルの `wsgi.py` にある `app` を WSGI アプリとして認識します。このリポジトリはその形に合わせています。
+Vercel の Flask/Python ドキュメントでは、トップレベルの `server.py` / `index.py` / `app.py` などにある `app` を自動検出する形が案内されています。このリポジトリは `server.py` に合わせています。
 
 ただし、このプロジェクトは今 `SQLite` を前提にしているため、Vercel 上では永続ディスクを使えません。現状のままでは `FREDCORE_DATABASE_PATH` 未指定時に `/tmp/fredcore.db` を使うため、データはインスタンス再起動やスケール時に消える前提です。
 
