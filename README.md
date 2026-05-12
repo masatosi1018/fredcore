@@ -51,6 +51,8 @@ http://127.0.0.1:8000
 
 Vercel にデプロイする場合、Python の WSGI エントリポイントとしてルートの `wsgi.py` を使います。
 
+Vercel の Python Runtime は、2026年3月17日更新の公式ドキュメント時点で、トップレベルの `wsgi.py` にある `app` を WSGI アプリとして認識します。このリポジトリはその形に合わせています。
+
 ただし、このプロジェクトは今 `SQLite` を前提にしているため、Vercel 上では永続ディスクを使えません。現状のままでは `FREDCORE_DATABASE_PATH` 未指定時に `/tmp/fredcore.db` を使うため、データはインスタンス再起動やスケール時に消える前提です。
 
 つまり現段階の Vercel デプロイは:
@@ -75,6 +77,15 @@ Vercel で最低限そろえる値:
 - `GOOGLE_OAUTH_CLIENT_ID`
 - `GOOGLE_OAUTH_CLIENT_SECRET`
 - `GOOGLE_SERVICE_ACCOUNT_FILE` または将来的な外部シークレット管理
+
+デプロイ手順の最短ルート:
+
+1. Vercel で GitHub の `masatosi1018/fredcore` を Import
+2. Root Directory はそのまま
+3. Python Version は `3.12`
+4. Environment Variables に `FREDCORE_APP_BASE_URL=https://<本番ドメイン>` を設定
+5. 必要に応じて `META_APP_ID` / `META_APP_SECRET` なども設定
+6. Deploy 後、Meta 側の OAuth リダイレクト URI に `https://<本番ドメイン>/oauth/meta/callback` を登録
 
 ## 2. 画面
 
