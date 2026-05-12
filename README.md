@@ -14,6 +14,7 @@ Adasi のスクリーンショットを土台にしつつ、FRED 向けの広告
 - 認証情報の `再認証` と、不要な行の `削除`
 - `設定` 画面で Meta / Google Sheets 接続情報を保存
 - 登録済み Meta アカウントの指定日数値を Google スプレッドシートへ手動転記
+- 連携済み Meta 認証プロフィールを優先して、未同期日を埋めながら日次 spend を転記
 - SQLite に保存してローカルで状態を保持
 - スクリーンショットに近いサイドバー型UI
 
@@ -21,7 +22,7 @@ Adasi のスクリーンショットを土台にしつつ、FRED 向けの広告
 
 - 認証プロフィール単位での日次自動同期
 - Google / TikTok の広告アカウント候補の API 取得
-- OAuth 認証プロフィールをそのまま本番同期へ使う一本化
+- 本番向けの永続DB化
 
 ## 1. 起動方法
 
@@ -67,6 +68,7 @@ Vercel で最低限そろえる値:
 - `FREDCORE_DATABASE_PATH=/tmp/fredcore.db` 省略可
 - `VERCEL=1` 自動付与
 - `FREDCORE_APP_BASE_URL=https://fredcore.vercel.app`
+- `CRON_SECRET=<ランダムな長い文字列>`
 
 よく使う Vercel Environment Variables:
 
@@ -77,6 +79,7 @@ Vercel で最低限そろえる値:
 - `GOOGLE_OAUTH_CLIENT_ID`
 - `GOOGLE_OAUTH_CLIENT_SECRET`
 - `GOOGLE_SERVICE_ACCOUNT_FILE` または将来的な外部シークレット管理
+- `CRON_SECRET`
 
 デプロイ手順の最短ルート:
 
@@ -86,6 +89,22 @@ Vercel で最低限そろえる値:
 4. Environment Variables に `FREDCORE_APP_BASE_URL=https://<本番ドメイン>` を設定
 5. 必要に応じて `META_APP_ID` / `META_APP_SECRET` なども設定
 6. Deploy 後、Meta 側の OAuth リダイレクト URI に `https://<本番ドメイン>/oauth/meta/callback` を登録
+
+### Vercel Cron
+
+`vercel.json` で `/jobs/meta/daily-sync` を日次実行する設定を入れています。2026年1月28日更新の Vercel 公式ドキュメントでは、`CRON_SECRET` を設定すると Vercel が `Authorization: Bearer <CRON_SECRET>` を自動送信します。このアプリもそのヘッダーを受け付けます。
+
+日次ジョブの動き:
+
+- 連携済み Meta アカウントの `credential_profile_id` から OAuth アクセストークンを優先利用
+- `last_synced_report_date` が空なら `created_at` の日付から開始
+- 未同期日を `target report date` まで順に backfill
+- 成功したアカウントは `sync_status`, `last_synced_at`, `last_synced_report_date` を更新
+
+補足:
+
+- 互換性のため、認証プロフィールにトークンが無いアカウントだけ `meta_access_token` をフォールバックで使います
+- ただし Vercel 上で SQLite のままだと永続化が弱いため、毎日確実に継続運用するには外部DB化が必要です
 
 ## 2. 画面
 

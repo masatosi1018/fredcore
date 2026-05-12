@@ -36,6 +36,7 @@ from app.oauth_clients import (
 from app.campaign_sync import sync_meta_campaigns_to_monthly_sheet
 from app.report_sheets import ensure_monthly_report_sheet
 from app.sync_jobs import run_meta_monthly_sync_job
+from app.sync_jobs import run_meta_daily_sync_job
 from app.admin_views import (
     render_accounts_page,
     render_credentials_page,
@@ -957,14 +958,12 @@ def application(environ, start_response):
     if path == "/accounts/meta/sync" and method == "POST":
         form = parse_form(environ)
         try:
-            config = MetaSheetSyncConfig.from_mapping(
-                REPOSITORY.get_integration_settings(),
+            job = run_meta_daily_sync_job(
+                repository=REPOSITORY,
+                settings=REPOSITORY.get_integration_settings(),
                 project_root=PROJECT_ROOT,
-            )
-            result = sync_meta_accounts_to_sheet(
-                REPOSITORY.list_accounts("meta"),
-                config=config,
                 report_date_input=form.get("report_date", "").strip(),
+                trigger_source="manual",
             )
         except Exception as exc:
             return redirect_to(
@@ -975,6 +974,13 @@ def application(environ, start_response):
                 error=str(exc),
             )
 
+        result = job.result
+        failure_message = (
+            " / ".join(result.failure_messages[:3])
+            + (" ほか" if result.failure_count > 3 else "")
+            if result.failure_count
+            else ""
+        )
         return redirect_to(
             start_response,
             "/accounts",
@@ -982,7 +988,13 @@ def application(environ, start_response):
             report_date=result.report_date,
             notice=(
                 f"{result.report_date} の Meta 数値を転記しました。"
-                f" 対象アカウント {result.account_count}件 / 更新 {result.updated_count}件 / 追加 {result.appended_count}件"
+                f" 対象アカウント {result.account_count}件 / 成功 {result.success_count}件"
+                f" / 更新 {result.updated_count}件 / 追加 {result.appended_count}件"
+            ),
+            error=(
+                f"{result.failure_count}件の同期に失敗しました。 {failure_message}"
+                if result.failure_count
+                else ""
             ),
         )
 
@@ -1030,7 +1042,11 @@ def application(environ, start_response):
             environ.get("HTTP_X_FREDCORE_JOB_TOKEN", "").strip()
             or query_param(environ, "token", "")
         )
-        if configured_token and supplied_token != configured_token:
+        cron_secret = os.environ.get("CRON_SECRET", "").strip()
+        auth_header = environ.get("HTTP_AUTHORIZATION", "").strip()
+        token_allowed = bool(configured_token) and supplied_token == configured_token
+        cron_allowed = bool(cron_secret) and auth_header == f"Bearer {cron_secret}"
+        if (configured_token or cron_secret) and not (token_allowed or cron_allowed):
             return respond_json(
                 start_response,
                 {"ok": False, "error": "invalid job token"},
@@ -1069,6 +1085,58 @@ def application(environ, start_response):
                 "spreadsheet_title": result.spreadsheet_title,
                 "created_spreadsheet": result.created_spreadsheet,
             },
+        )
+
+    if path == "/jobs/meta/daily-sync" and method in {"GET", "POST"}:
+        settings = REPOSITORY.get_integration_settings()
+        configured_token = settings.get("job_trigger_token", "").strip()
+        supplied_token = (
+            environ.get("HTTP_X_FREDCORE_JOB_TOKEN", "").strip()
+            or query_param(environ, "token", "")
+        )
+        cron_secret = os.environ.get("CRON_SECRET", "").strip()
+        auth_header = environ.get("HTTP_AUTHORIZATION", "").strip()
+        token_allowed = bool(configured_token) and supplied_token == configured_token
+        cron_allowed = bool(cron_secret) and auth_header == f"Bearer {cron_secret}"
+        if (configured_token or cron_secret) and not (token_allowed or cron_allowed):
+            return respond_json(
+                start_response,
+                {"ok": False, "error": "invalid job token"},
+                "403 Forbidden",
+            )
+
+        report_date = query_param(environ, "report_date", "")
+        try:
+            job = run_meta_daily_sync_job(
+                repository=REPOSITORY,
+                settings=settings,
+                project_root=PROJECT_ROOT,
+                report_date_input=report_date,
+                trigger_source="cron",
+            )
+        except Exception as exc:
+            return respond_json(
+                start_response,
+                {"ok": False, "error": str(exc)},
+                "500 Internal Server Error",
+            )
+
+        result = job.result
+        return respond_json(
+            start_response,
+            {
+                "ok": result.failure_count == 0,
+                "sync_run_id": job.sync_run_id,
+                "report_date": result.report_date,
+                "account_count": result.account_count,
+                "row_count": result.row_count,
+                "updated_count": result.updated_count,
+                "appended_count": result.appended_count,
+                "success_count": result.success_count,
+                "failure_count": result.failure_count,
+                "failure_messages": list(result.failure_messages),
+            },
+            "200 OK" if result.failure_count == 0 else "207 Multi-Status",
         )
 
     if path == "/settings" and method == "GET":

@@ -113,6 +113,18 @@ class AdminRepositoryTest(unittest.TestCase):
         self.assertEqual(rows[0]["row_count"], 10)
         self.assertEqual(rows[0]["spreadsheet_title"], "2026年4月 広告消化キャンペーン一覧")
 
+    def test_update_account_sync_state(self):
+        account_id = self.repository.list_accounts("meta")[0]["id"]
+        self.repository.update_account_sync_state(
+            account_id,
+            sync_status="同期済み",
+            last_synced_at="2026-05-12T00:00:00+00:00",
+            last_synced_report_date="2026-05-11",
+        )
+        row = self.repository.list_accounts("meta")[0]
+        self.assertEqual(row["sync_status"], "同期済み")
+        self.assertEqual(row["last_synced_report_date"], "2026-05-11")
+
     def test_create_and_consume_oauth_state(self):
         self.repository.create_oauth_state(
             state="state-123",

@@ -4,8 +4,9 @@ from decimal import Decimal
 from pathlib import Path
 
 from app.admin_db import AdminRepository
+from app.models import DailySpendRecord
 from app.models import CampaignPerformanceRecord
-from app.sync_jobs import run_meta_monthly_sync_job
+from app.sync_jobs import run_meta_daily_sync_job, run_meta_monthly_sync_job
 
 
 class FakeMetaCampaignClient:
@@ -66,26 +67,66 @@ class FakeSheetManager:
         }
 
 
+class FakeMetaDailyClient:
+    def __init__(self, access_token, graph_api_version, timeout_seconds):
+        self.access_token = access_token
+
+    def fetch_account_daily_spend(self, account_id, report_date):
+        return DailySpendRecord(
+            report_date=report_date,
+            account_id=account_id,
+            account_name=f"Account {account_id}",
+            currency="JPY",
+            spend=Decimal("123.45"),
+            timezone_name="Asia/Tokyo",
+            fetched_at="2026-05-12T00:00:00+00:00",
+        )
+
+
+class FakeMetaDailySheetsClient:
+    def __init__(self, service_account_file, spreadsheet_id, sheet_name):
+        self.rows = []
+
+    def ensure_header(self):
+        return None
+
+    def upsert_rows(self, keyed_rows):
+        self.rows = list(keyed_rows)
+        return (0, len(self.rows))
+
+
 class SyncJobsTest(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database_path = Path(self.temp_dir.name) / "fredcore.db"
         self.repository = AdminRepository(self.database_path)
         self.repository.initialize()
+        self.repository.create_credential(
+            platform="meta",
+            profile_name="Meta OAuth",
+            profile_identifier="meta@example.com",
+            creator_email="test@example.com",
+            auth_expiry="",
+            auth_type="oauth",
+            access_token="oauth-token-1",
+        )
+        credential_id = self.repository.list_credentials("meta", "Meta OAuth")[0]["id"]
         self.repository.create_account(
             platform="meta",
             account_name="Meta Main",
             account_identifier="act_123",
             timezone_name="Asia/Tokyo",
-            credential_profile_id=None,
+            credential_profile_id=credential_id,
             operator_email="test@example.com",
             parent_account="-",
         )
         self.settings = {
-            "meta_access_token": "token",
+            "meta_access_token": "fallback-token",
             "meta_graph_api_version": "v22.0",
             "meta_request_timeout_seconds": "30",
             "google_service_account_file": "service.json",
+            "google_spreadsheet_id": "sheet-daily-1",
+            "google_sheet_name": "Meta Daily Spend",
             "google_reports_folder_id": "folder-123",
             "google_monthly_report_sheet_tab_name": "キャンペーン一覧",
             "report_timezone": "Asia/Tokyo",
@@ -110,6 +151,25 @@ class SyncJobsTest(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["status"], "成功")
         self.assertEqual(rows[0]["trigger_source"], "cron")
+
+    def test_run_meta_daily_sync_job_uses_oauth_token_and_updates_account(self):
+        job = run_meta_daily_sync_job(
+            self.repository,
+            settings=self.settings,
+            project_root=Path(self.temp_dir.name),
+            report_date_input="2026-05-12",
+            trigger_source="cron",
+            meta_client_factory=FakeMetaDailyClient,
+            sheets_client_factory=FakeMetaDailySheetsClient,
+        )
+        self.assertEqual(job.result.row_count, 1)
+        self.assertEqual(job.result.failure_count, 0)
+        account = self.repository.list_accounts("meta")[0]
+        self.assertEqual(account["sync_status"], "同期済み")
+        self.assertEqual(account["last_synced_report_date"], "2026-05-12")
+        rows = self.repository.list_sync_runs()
+        self.assertEqual(rows[0]["job_name"], "meta_daily_spend_sync")
+        self.assertEqual(rows[0]["status"], "成功")
 
     def test_run_meta_monthly_sync_job_records_failure(self):
         with self.assertRaises(RuntimeError):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from datetime import date, datetime, timedelta, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Optional, Sequence
@@ -81,6 +82,7 @@ class MetaSheetSyncConfig:
         values: Mapping[str, str],
         *,
         project_root: Path,
+        require_meta_access_token: bool = True,
     ) -> "MetaSheetSyncConfig":
         merged = merged_integration_settings(values)
 
@@ -96,8 +98,12 @@ class MetaSheetSyncConfig:
         if not service_account_path.is_absolute():
             service_account_path = project_root / service_account_path
 
+        meta_access_token = merged.get("meta_access_token", "").strip()
+        if require_meta_access_token and not meta_access_token:
+            raise ConfigError("Meta アクセストークン を設定してください。")
+
         return cls(
-            meta_access_token=require("meta_access_token", "Meta アクセストークン"),
+            meta_access_token=meta_access_token,
             meta_graph_api_version=merged["meta_graph_api_version"].strip() or "v22.0",
             meta_request_timeout_seconds=int(
                 merged["meta_request_timeout_seconds"].strip() or "30"
@@ -119,6 +125,18 @@ class MetaSyncResult:
     row_count: int
     updated_count: int
     appended_count: int
+
+
+@dataclass(frozen=True)
+class MetaDailySyncResult:
+    report_date: str
+    account_count: int
+    row_count: int
+    updated_count: int
+    appended_count: int
+    success_count: int
+    failure_count: int
+    failure_messages: tuple[str, ...]
 
 
 def sync_meta_accounts_to_sheet(
@@ -190,4 +208,176 @@ def sync_meta_accounts_to_sheet(
         row_count=len(keyed_rows),
         updated_count=updated_count,
         appended_count=appended_count,
+    )
+
+
+def _date_range(start_date: date, end_date: date):
+    current = start_date
+    while current <= end_date:
+        yield current
+        current += timedelta(days=1)
+
+
+def _account_start_date(account_row, target_report_date: date) -> Optional[date]:
+    last_synced_report_date = str(account_row["last_synced_report_date"] or "").strip()
+    if last_synced_report_date:
+        return date.fromisoformat(last_synced_report_date) + timedelta(days=1)
+
+    created_at = str(account_row["created_at"] or "").strip()
+    if created_at:
+        try:
+            created_date = datetime.fromisoformat(created_at).date()
+        except ValueError:
+            created_date = target_report_date
+        return created_date
+    return target_report_date
+
+
+def _resolve_account_access_token(account_row, repository, fallback_token: str) -> str:
+    credential_profile_id = account_row["credential_profile_id"]
+    if credential_profile_id:
+        credential = repository.get_credential(int(credential_profile_id))
+        if credential is not None:
+            access_token = str(credential["access_token"] or "").strip()
+            if access_token:
+                return access_token
+    return fallback_token.strip()
+
+
+def _sync_error_message(exc: Exception) -> str:
+    message = str(exc).strip() or exc.__class__.__name__
+    if len(message) > 120:
+        return f"{message[:117]}..."
+    return message
+
+
+def sync_linked_meta_accounts_to_sheet(
+    account_rows: Sequence[Mapping[str, str]],
+    *,
+    settings: Mapping[str, str],
+    repository,
+    project_root: Path,
+    report_date_input: Optional[str] = None,
+    meta_client_factory: Optional[Callable[..., object]] = None,
+    sheets_client_factory: Optional[Callable[..., object]] = None,
+) -> MetaDailySyncResult:
+    config = MetaSheetSyncConfig.from_mapping(
+        settings,
+        project_root=project_root,
+        require_meta_access_token=False,
+    )
+    target_report_date = parse_target_date(report_date_input, config.report_timezone)
+    report_date = iso_date(target_report_date)
+    fallback_token = config.meta_access_token.strip()
+
+    active_accounts = [
+        row
+        for row in account_rows
+        if str(row["platform"]).strip() == "meta" and int(row["sync_enabled"] or 1) == 1
+    ]
+    if not active_accounts:
+        raise ConfigError("同期対象の Meta アカウントが登録されていません。")
+
+    if meta_client_factory is None:
+        from app.meta_api import MetaClient
+
+        meta_client_class = MetaClient
+    else:
+        meta_client_class = meta_client_factory
+
+    keyed_rows = []
+    success_updates = []
+    failure_updates = []
+    failure_messages = []
+
+    for account_row in active_accounts:
+        account_db_id = int(account_row["id"])
+        account_name = str(account_row["account_name"] or account_row["account_identifier"]).strip()
+        raw_account_id = str(account_row["account_identifier"]).strip()
+        if not raw_account_id:
+            failure_updates.append((account_db_id, "失敗: アカウントIDが未設定です。"))
+            failure_messages.append(f"{account_name}: アカウントIDが未設定です。")
+            continue
+
+        access_token = _resolve_account_access_token(account_row, repository, fallback_token)
+        if not access_token:
+            failure_updates.append((account_db_id, "失敗: Meta トークン未設定"))
+            failure_messages.append(f"{account_name}: Meta トークン未設定")
+            continue
+
+        start_date = _account_start_date(account_row, target_report_date)
+        if start_date is None or start_date > target_report_date:
+            continue
+
+        client = meta_client_class(
+            access_token=access_token,
+            graph_api_version=config.meta_graph_api_version,
+            timeout_seconds=config.meta_request_timeout_seconds,
+        )
+        normalized_account_id = normalize_account_id(raw_account_id)
+        last_report_date = ""
+        try:
+            for current_date in _date_range(start_date, target_report_date):
+                current_report_date = iso_date(current_date)
+                record = client.fetch_account_daily_spend(
+                    account_id=normalized_account_id,
+                    report_date=current_report_date,
+                )
+                if config.include_zero_spend_rows or record.spend != 0:
+                    keyed_rows.append(
+                        (
+                            compose_row_key(record.report_date, record.account_id),
+                            build_sheet_row(record),
+                        )
+                    )
+                last_report_date = current_report_date
+        except Exception as exc:
+            message = _sync_error_message(exc)
+            failure_updates.append((account_db_id, f"失敗: {message}"))
+            failure_messages.append(f"{account_name}: {message}")
+            continue
+
+        if last_report_date:
+            success_updates.append((account_db_id, last_report_date))
+
+    updated_count = 0
+    appended_count = 0
+    if keyed_rows:
+        if sheets_client_factory is None:
+            from app.sheets import GoogleSheetsClient
+
+            sheets_client_class = GoogleSheetsClient
+        else:
+            sheets_client_class = sheets_client_factory
+        sheets_client = sheets_client_class(
+            service_account_file=str(config.google_service_account_file),
+            spreadsheet_id=config.google_spreadsheet_id,
+            sheet_name=config.google_sheet_name,
+        )
+        sheets_client.ensure_header()
+        updated_count, appended_count = sheets_client.upsert_rows(keyed_rows)
+
+    synced_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    for account_db_id, last_report_date in success_updates:
+        repository.update_account_sync_state(
+            account_db_id,
+            sync_status="同期済み",
+            last_synced_at=synced_at,
+            last_synced_report_date=last_report_date,
+        )
+    for account_db_id, status in failure_updates:
+        repository.update_account_sync_state(
+            account_db_id,
+            sync_status=status,
+        )
+
+    return MetaDailySyncResult(
+        report_date=report_date,
+        account_count=len(active_accounts),
+        row_count=len(keyed_rows),
+        updated_count=updated_count,
+        appended_count=appended_count,
+        success_count=len(success_updates),
+        failure_count=len(failure_updates),
+        failure_messages=tuple(failure_messages),
     )

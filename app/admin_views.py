@@ -1267,14 +1267,13 @@ def render_rule_action(row) -> str:
 def render_meta_sync_panel(active_platform: str, sync_settings, sync_date: str) -> str:
     merged = merged_integration_settings(sync_settings)
     has_required_settings = bool(
-        merged["meta_access_token"].strip()
-        and merged["google_spreadsheet_id"].strip()
+        merged["google_spreadsheet_id"].strip()
         and merged["google_service_account_file"].strip()
     )
     status_label = (
-        "同期設定は保存済みです。"
+        "Google Sheets の設定は保存済みです。Meta は連携済み認証プロフィールのトークンを優先して使います。"
         if has_required_settings
-        else "同期前に設定画面で Meta と Google Sheets の接続情報を入れてください。"
+        else "同期前に設定画面で Google Sheets の接続情報を入れてください。"
     )
     action_html = (
         f"""
@@ -1584,7 +1583,10 @@ def render_accounts_page(
         )
     sync_panel = ""
     if active_platform == "meta" and sync_settings is not None:
-        sync_panel = render_monthly_campaign_sync_panel(sync_settings, sync_date)
+        sync_panel = (
+            render_meta_sync_panel(active_platform, sync_settings, sync_date)
+            + render_monthly_campaign_sync_panel(sync_settings, sync_date)
+        )
     account_link_modal = render_account_link_modal(
         active_platform,
         credential_rows,

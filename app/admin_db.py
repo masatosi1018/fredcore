@@ -85,6 +85,7 @@ class AdminRepository:
                     sync_enabled INTEGER NOT NULL DEFAULT 1,
                     sync_status TEXT NOT NULL DEFAULT '未同期',
                     last_synced_at TEXT,
+                    last_synced_report_date TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     FOREIGN KEY (credential_profile_id) REFERENCES credential_profiles(id)
@@ -230,6 +231,12 @@ class AdminRepository:
                 connection,
                 "linked_accounts",
                 "last_synced_at",
+                "TEXT",
+            )
+            self._ensure_column(
+                connection,
+                "linked_accounts",
+                "last_synced_report_date",
                 "TEXT",
             )
 
@@ -568,6 +575,7 @@ class AdminRepository:
         sync_enabled: bool = True,
         sync_status: str = "未同期",
         last_synced_at: str = "",
+        last_synced_report_date: str = "",
     ) -> None:
         now = utc_now()
         with self.connect() as connection:
@@ -577,8 +585,9 @@ class AdminRepository:
                     platform, account_name, account_identifier, timezone_name,
                     credential_profile_id, operator_email, parent_account,
                     selection_source, sync_enabled, sync_status, last_synced_at,
+                    last_synced_report_date,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     platform,
@@ -592,8 +601,37 @@ class AdminRepository:
                     1 if sync_enabled else 0,
                     sync_status or "未同期",
                     last_synced_at or None,
+                    last_synced_report_date or None,
                     now,
                     now,
+                ),
+            )
+
+    def update_account_sync_state(
+        self,
+        account_id: int,
+        *,
+        sync_status: str,
+        last_synced_at: str = "",
+        last_synced_report_date: str = "",
+    ) -> None:
+        now = utc_now()
+        with self.connect() as connection:
+            connection.execute(
+                """
+                UPDATE linked_accounts
+                SET sync_status = ?,
+                    last_synced_at = ?,
+                    last_synced_report_date = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    sync_status.strip() or "未同期",
+                    last_synced_at or None,
+                    last_synced_report_date or None,
+                    now,
+                    account_id,
                 ),
             )
 
