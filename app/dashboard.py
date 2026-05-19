@@ -880,7 +880,7 @@ def application(environ, start_response):
                 start_response,
                 "/credentials",
                 platform="google",
-                error=f"Google OAuth がキャンセルされました: {oauth_error}",
+                error="Google OAuth がキャンセルされました。",
             )
         if not state or not code:
             return redirect_to(
@@ -917,7 +917,7 @@ def application(environ, start_response):
                 start_response,
                 "/credentials",
                 platform="meta",
-                error=f"Meta OAuth がキャンセルされました: {message}",
+                error="Meta OAuth がキャンセルされました。",
             )
         if not state or not code:
             return redirect_to(
