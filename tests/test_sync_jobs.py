@@ -11,10 +11,13 @@ from app.sync_jobs import run_meta_daily_sync_job, run_meta_monthly_sync_job
 
 
 class FakeMetaCampaignClient:
+    used_tokens = []
+
     def __init__(self, access_token, graph_api_version, timeout_seconds):
         self.access_token = access_token
         self.graph_api_version = graph_api_version
         self.timeout_seconds = timeout_seconds
+        self.__class__.used_tokens.append(access_token)
 
     def fetch_account_daily_campaigns(self, account_id, report_date):
         return [
@@ -102,6 +105,7 @@ class SyncJobsTest(unittest.TestCase):
         self.database_path = Path(self.temp_dir.name) / "fredcore.db"
         self.repository = AdminRepository(self.database_path)
         self.repository.initialize()
+        FakeMetaCampaignClient.used_tokens = []
         self.repository.create_credential(
             platform="meta",
             profile_name="Meta OAuth",
@@ -206,6 +210,23 @@ class SyncJobsTest(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["status"], "失敗")
         self.assertIn("meta api failed", rows[0]["error_message"])
+
+    def test_run_meta_monthly_sync_job_can_use_oauth_token_and_fixed_spreadsheet(self):
+        settings = dict(self.settings)
+        settings["meta_access_token"] = ""
+        settings["google_reports_folder_id"] = ""
+        settings["google_spreadsheet_id"] = "fixed-sheet-1"
+        job = run_meta_monthly_sync_job(
+            self.repository,
+            settings=settings,
+            project_root=Path(self.temp_dir.name),
+            report_date_input="2026-04-30",
+            trigger_source="manual",
+            meta_client_factory=FakeMetaCampaignClient,
+            sheets_client_factory=FakeCampaignSheetsClient,
+        )
+        self.assertEqual(job.result.spreadsheet_url, "https://docs.google.com/spreadsheets/d/fixed-sheet-1/edit")
+        self.assertEqual(FakeMetaCampaignClient.used_tokens, ["oauth-token-1"])
 
 
 if __name__ == "__main__":

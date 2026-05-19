@@ -13,6 +13,7 @@ from app.transform import (
     campaign_row_key_from_values,
     compose_campaign_row_key,
 )
+from app.meta_sync import merged_integration_settings
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,8 @@ class MonthlyCampaignSyncConfig:
     meta_graph_api_version: str
     meta_request_timeout_seconds: int
     google_service_account_file: Path
+    google_spreadsheet_id: str
+    google_reports_folder_id: str
     google_monthly_report_sheet_tab_name: str
     report_timezone: str
 
@@ -31,30 +34,99 @@ class MonthlyCampaignSyncConfig:
         *,
         project_root: Path,
     ) -> "MonthlyCampaignSyncConfig":
-        meta_access_token = values.get("meta_access_token", "").strip()
-        if not meta_access_token:
-            raise ConfigError("Meta アクセストークン を設定してください。")
+        merged = merged_integration_settings(values)
+        meta_access_token = merged.get("meta_access_token", "").strip()
 
         service_account_path = Path(
-            values.get("google_service_account_file", "").strip()
+            merged.get("google_service_account_file", "").strip()
             or "config/google-service-account.json"
         )
         if not service_account_path.is_absolute():
             service_account_path = project_root / service_account_path
 
+        google_spreadsheet_id = merged.get("google_spreadsheet_id", "").strip()
+        google_reports_folder_id = str(merged.get("google_reports_folder_id", "")).strip()
+        if not google_spreadsheet_id and not google_reports_folder_id:
+            raise ConfigError(
+                "Google 共有ドライブ配下のレポートフォルダID または Google スプレッドシートID を設定してください。"
+            )
+
         return cls(
             meta_access_token=meta_access_token,
-            meta_graph_api_version=values.get("meta_graph_api_version", "").strip() or "v22.0",
+            meta_graph_api_version=merged.get("meta_graph_api_version", "").strip() or "v22.0",
             meta_request_timeout_seconds=int(
-                values.get("meta_request_timeout_seconds", "").strip() or "30"
+                merged.get("meta_request_timeout_seconds", "").strip() or "30"
             ),
             google_service_account_file=service_account_path,
+            google_spreadsheet_id=google_spreadsheet_id,
+            google_reports_folder_id=google_reports_folder_id,
             google_monthly_report_sheet_tab_name=(
-                values.get("google_monthly_report_sheet_tab_name", "").strip()
+                merged.get("google_monthly_report_sheet_tab_name", "").strip()
                 or "キャンペーン一覧"
             ),
-            report_timezone=values.get("report_timezone", "").strip() or "Asia/Tokyo",
+            report_timezone=merged.get("report_timezone", "").strip() or "Asia/Tokyo",
         )
+
+
+@dataclass(frozen=True)
+class CampaignSheetTarget:
+    spreadsheet_id: str
+    spreadsheet_url: str
+    spreadsheet_title: str
+    created_spreadsheet: bool
+
+
+def _resolve_account_access_token(account_row, repository, fallback_token: str) -> str:
+    credential_profile_id = account_row["credential_profile_id"]
+    if credential_profile_id:
+        credential = repository.get_credential(int(credential_profile_id))
+        if credential is not None:
+            access_token = str(credential["access_token"] or "").strip()
+            if access_token:
+                return access_token
+    return fallback_token.strip()
+
+
+def _resolve_target_sheet(
+    repository,
+    *,
+    month_key: str,
+    settings: Mapping[str, str],
+    project_root: Path,
+    sheet_manager_factory: Optional[Callable[..., object]],
+    config: MonthlyCampaignSyncConfig,
+) -> CampaignSheetTarget:
+    existing = repository.get_monthly_report_sheet(month_key)
+    if existing:
+        return CampaignSheetTarget(
+            spreadsheet_id=str(existing["spreadsheet_id"]),
+            spreadsheet_url=str(existing["spreadsheet_url"]),
+            spreadsheet_title=str(existing["spreadsheet_title"]),
+            created_spreadsheet=False,
+        )
+
+    merged = merged_integration_settings(settings)
+    if config.google_reports_folder_id:
+        created = ensure_monthly_report_sheet(
+            repository,
+            month_key=month_key,
+            settings=merged,
+            project_root=project_root,
+            sheet_manager_factory=sheet_manager_factory,
+        )
+        return CampaignSheetTarget(
+            spreadsheet_id=created.spreadsheet_id,
+            spreadsheet_url=created.spreadsheet_url,
+            spreadsheet_title=created.spreadsheet_title,
+            created_spreadsheet=created.created,
+        )
+
+    return CampaignSheetTarget(
+        spreadsheet_id=config.google_spreadsheet_id,
+        spreadsheet_url=f"https://docs.google.com/spreadsheets/d/{config.google_spreadsheet_id}/edit",
+        spreadsheet_title=f"{month_key} 固定スプレッドシート",
+        created_spreadsheet=False,
+    )
 
 
 @dataclass(frozen=True)
@@ -88,24 +160,21 @@ def sync_meta_campaigns_to_monthly_sheet(
     report_date = iso_date(parse_target_date(report_date_input, config.report_timezone))
     month_key = report_date[:7]
 
-    monthly_sheet = ensure_monthly_report_sheet(
+    target_sheet = _resolve_target_sheet(
         repository,
         month_key=month_key,
         settings=settings,
         project_root=project_root,
         sheet_manager_factory=sheet_manager_factory,
+        config=config,
     )
 
-    normalized_account_ids = []
-    for row in account_rows:
-        raw_account_id = str(row["account_identifier"]).strip()
-        if not raw_account_id:
-            continue
-        normalized = normalize_account_id(raw_account_id)
-        if normalized not in normalized_account_ids:
-            normalized_account_ids.append(normalized)
-
-    if not normalized_account_ids:
+    active_accounts = [
+        row
+        for row in account_rows
+        if str(row["platform"]).strip() == "meta" and int(row["sync_enabled"] or 1) == 1
+    ]
+    if not active_accounts:
         raise ConfigError("Meta アカウントが登録されていません。")
 
     if meta_client_factory is None:
@@ -114,18 +183,32 @@ def sync_meta_campaigns_to_monthly_sheet(
         meta_client_class = MetaClient
     else:
         meta_client_class = meta_client_factory
-    meta_client = meta_client_class(
-        access_token=config.meta_access_token,
-        graph_api_version=config.meta_graph_api_version,
-        timeout_seconds=config.meta_request_timeout_seconds,
-    )
 
     keyed_rows = []
-    for account_id in normalized_account_ids:
-        records = meta_client.fetch_account_daily_campaigns(
+    client_by_token = {}
+    account_count = 0
+    for account_row in active_accounts:
+        raw_account_id = str(account_row["account_identifier"]).strip()
+        if not raw_account_id:
+            continue
+        access_token = _resolve_account_access_token(account_row, repository, config.meta_access_token)
+        if not access_token:
+            account_name = str(account_row["account_name"] or raw_account_id).strip()
+            raise ConfigError(
+                f"{account_name} の Meta トークンがありません。認証プロフィールを再連携するか Meta アクセストークン を設定してください。"
+            )
+        account_id = normalize_account_id(raw_account_id)
+        if access_token not in client_by_token:
+            client_by_token[access_token] = meta_client_class(
+                access_token=access_token,
+                graph_api_version=config.meta_graph_api_version,
+                timeout_seconds=config.meta_request_timeout_seconds,
+            )
+        records = client_by_token[access_token].fetch_account_daily_campaigns(
             account_id=account_id,
             report_date=report_date,
         )
+        account_count += 1
         for record in records:
             if record.spend <= 0:
                 continue
@@ -149,7 +232,7 @@ def sync_meta_campaigns_to_monthly_sheet(
         sheets_client_class = sheets_client_factory
     sheets_client = sheets_client_class(
         service_account_file=str(config.google_service_account_file),
-        spreadsheet_id=monthly_sheet.spreadsheet_id,
+        spreadsheet_id=target_sheet.spreadsheet_id,
         sheet_name=config.google_monthly_report_sheet_tab_name,
         headers=MONTHLY_REPORT_HEADERS,
         row_key_factory=campaign_row_key_from_values,
@@ -160,11 +243,11 @@ def sync_meta_campaigns_to_monthly_sheet(
     return MonthlyCampaignSyncResult(
         report_date=report_date,
         month_key=month_key,
-        account_count=len(normalized_account_ids),
+        account_count=account_count,
         row_count=len(keyed_rows),
         updated_count=updated_count,
         appended_count=appended_count,
-        spreadsheet_url=monthly_sheet.spreadsheet_url,
-        spreadsheet_title=monthly_sheet.spreadsheet_title,
-        created_spreadsheet=monthly_sheet.created,
+        spreadsheet_url=target_sheet.spreadsheet_url,
+        spreadsheet_title=target_sheet.spreadsheet_title,
+        created_spreadsheet=target_sheet.created_spreadsheet,
     )

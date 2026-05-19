@@ -1267,13 +1267,16 @@ def render_rule_action(row) -> str:
 def render_meta_sync_panel(active_platform: str, sync_settings, sync_date: str) -> str:
     merged = merged_integration_settings(sync_settings)
     has_required_settings = bool(
-        merged["google_spreadsheet_id"].strip()
-        and merged["google_service_account_file"].strip()
+        merged["google_service_account_file"].strip()
+        and (
+            merged["google_reports_folder_id"].strip()
+            or merged["google_spreadsheet_id"].strip()
+        )
     )
     status_label = (
-        "Google Sheets の設定は保存済みです。Meta は連携済み認証プロフィールのトークンを優先して使います。"
+        "Google Sheets の設定は保存済みです。Meta は連携済み認証プロフィールのトークンを優先して使い、キャンペーン一覧タブへ反映します。"
         if has_required_settings
-        else "同期前に設定画面で Google Sheets の接続情報を入れてください。"
+        else "同期前に設定画面で Google サービスアカウント JSON と、保存先フォルダID または既存スプレッドシートID を入れてください。"
     )
     action_html = (
         f"""
@@ -1281,7 +1284,7 @@ def render_meta_sync_panel(active_platform: str, sync_settings, sync_date: str) 
           <label>対象日
             <input type="date" name="report_date" value="{escape(sync_date)}">
           </label>
-          <button class="primary-btn" type="submit">指定日の数値をスプシへ転記</button>
+          <button class="primary-btn" type="submit">指定日の数値をキャンペーン一覧へ反映</button>
         </form>
         """
         if has_required_settings
@@ -1290,11 +1293,12 @@ def render_meta_sync_panel(active_platform: str, sync_settings, sync_date: str) 
     return f"""
     <section class="sync-panel">
       <div>
-        <h2>Meta 数値をスプレッドシートへ転記</h2>
+        <h2>Meta 数値をキャンペーン一覧へ反映</h2>
         <p>{escape(status_label)}</p>
         <div class="sync-meta">
-          <span>シート名: {escape(merged["google_sheet_name"])}</span>
-          <span>スプレッドシートID: {escape(merged["google_spreadsheet_id"] or "未設定")}</span>
+          <span>転記タブ: {escape(merged["google_monthly_report_sheet_tab_name"])}</span>
+          <span>固定スプシID: {escape(merged["google_spreadsheet_id"] or "未設定")}</span>
+          <span>保存先フォルダ: {escape(merged["google_reports_folder_id"] or "未設定")}</span>
         </div>
       </div>
       {action_html}
@@ -1583,10 +1587,7 @@ def render_accounts_page(
         )
     sync_panel = ""
     if active_platform == "meta" and sync_settings is not None:
-        sync_panel = (
-            render_meta_sync_panel(active_platform, sync_settings, sync_date)
-            + render_monthly_campaign_sync_panel(sync_settings, sync_date)
-        )
+        sync_panel = render_meta_sync_panel(active_platform, sync_settings, sync_date)
     account_link_modal = render_account_link_modal(
         active_platform,
         credential_rows,
@@ -2036,9 +2037,9 @@ def render_settings_page(values, *, notice: str = "", error: str = "") -> bytes:
           <input type="text" name="meta_app_secret" value="{escape(merged['meta_app_secret'])}">
         </label>
         <label>Meta アクセストークン
-          <input type="text" name="meta_access_token" value="{escape(merged['meta_access_token'])}" placeholder="EAAB..." required>
+          <input type="text" name="meta_access_token" value="{escape(merged['meta_access_token'])}" placeholder="EAAB...">
         </label>
-        <div class="settings-inline-note">`Meta App ID / Secret` は認証プロフィールの OAuth 連携に使います。`Meta アクセストークン` は、今の日次同期でまだ別途使っています。</div>
+        <div class="settings-inline-note">`Meta App ID / Secret` は認証プロフィールの OAuth 連携に使います。`Meta アクセストークン` は、認証プロフィールにトークンが無い場合の fallback として使います。</div>
         <label>Meta Graph API バージョン
           <input type="text" name="meta_graph_api_version" value="{escape(merged['meta_graph_api_version'])}">
         </label>
@@ -2051,6 +2052,7 @@ def render_settings_page(values, *, notice: str = "", error: str = "") -> bytes:
         <label>Google シート名
           <input type="text" name="google_sheet_name" value="{escape(merged['google_sheet_name'])}">
         </label>
+        <div class="settings-inline-note">固定の `Google スプレッドシートID` があれば、`キャンペーン一覧` タブへの反映先として流用できます。`Google 共有ドライブ配下のレポートフォルダID` を入れると月次スプシを自動作成します。</div>
         <label>Google 共有ドライブ配下のレポートフォルダID
           <input type="text" name="google_reports_folder_id" value="{escape(merged['google_reports_folder_id'])}" placeholder="共有ドライブ内の保存先フォルダID or URL">
         </label>

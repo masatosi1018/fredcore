@@ -34,10 +34,8 @@ from app.oauth_clients import (
     meta_oauth_config,
     metadata_json_for_oauth,
 )
-from app.campaign_sync import sync_meta_campaigns_to_monthly_sheet
 from app.report_sheets import ensure_monthly_report_sheet
 from app.sync_jobs import run_meta_monthly_sync_job
-from app.sync_jobs import run_meta_daily_sync_job
 from app.admin_views import (
     render_accounts_page,
     render_credentials_page,
@@ -998,13 +996,12 @@ def application(environ, start_response):
     if path == "/accounts/meta/sync" and method == "POST":
         form = parse_form(environ)
         try:
-            job = run_meta_daily_sync_job(
-                repository=REPOSITORY,
+            job = run_meta_monthly_sync_job(
                 settings=REPOSITORY.get_integration_settings(),
+                repository=REPOSITORY,
                 project_root=PROJECT_ROOT,
                 report_date_input=form.get("report_date", "").strip(),
                 trigger_source="manual",
-                force_single_report_date=True,
             )
         except Exception as exc:
             return redirect_to(
@@ -1016,10 +1013,9 @@ def application(environ, start_response):
             )
 
         result = job.result
-        failure_message = (
-            " / ".join(result.failure_messages[:3])
-            + (" ほか" if result.failure_count > 3 else "")
-            if result.failure_count
+        created_message = (
+            f" 月次スプシを新規作成: {result.spreadsheet_title}"
+            if result.created_spreadsheet
             else ""
         )
         return redirect_to(
@@ -1028,14 +1024,9 @@ def application(environ, start_response):
             platform="meta",
             report_date=result.report_date,
             notice=(
-                f"{result.report_date} の Meta 数値を転記しました。"
-                f" 対象アカウント {result.account_count}件 / 成功 {result.success_count}件"
-                f" / 更新 {result.updated_count}件 / 追加 {result.appended_count}件"
-            ),
-            error=(
-                f"{result.failure_count}件の同期に失敗しました。 {failure_message}"
-                if result.failure_count
-                else ""
+                f"{result.report_date} の Meta 数値をキャンペーン一覧へ反映しました。"
+                f" 対象アカウント {result.account_count}件 / 行数 {result.row_count}件 / 更新 {result.updated_count}件 / 追加 {result.appended_count}件。"
+                f"{created_message}"
             ),
         )
 
@@ -1148,9 +1139,9 @@ def application(environ, start_response):
 
         report_date = query_param(environ, "report_date", "")
         try:
-            job = run_meta_daily_sync_job(
-                repository=REPOSITORY,
+            job = run_meta_monthly_sync_job(
                 settings=settings,
+                repository=REPOSITORY,
                 project_root=PROJECT_ROOT,
                 report_date_input=report_date,
                 trigger_source="cron",
@@ -1166,18 +1157,19 @@ def application(environ, start_response):
         return respond_json(
             start_response,
             {
-                "ok": result.failure_count == 0,
+                "ok": True,
                 "sync_run_id": job.sync_run_id,
                 "report_date": result.report_date,
+                "month_key": result.month_key,
                 "account_count": result.account_count,
                 "row_count": result.row_count,
                 "updated_count": result.updated_count,
                 "appended_count": result.appended_count,
-                "success_count": result.success_count,
-                "failure_count": result.failure_count,
-                "failure_messages": list(result.failure_messages),
+                "spreadsheet_url": result.spreadsheet_url,
+                "spreadsheet_title": result.spreadsheet_title,
+                "created_spreadsheet": result.created_spreadsheet,
             },
-            "200 OK" if result.failure_count == 0 else "207 Multi-Status",
+            "200 OK",
         )
 
     if path == "/settings" and method == "GET":
