@@ -9,6 +9,38 @@ from app.account_linking import ACCOUNT_LINK_FLOW, list_discoverable_accounts
 from app.meta_sync import merged_integration_settings
 
 
+def _fmt_date(value: str) -> str:
+    """ISO 日付 → YYYY/MM/DD"""
+    if not value:
+        return "ー"
+    try:
+        s = value.replace("T", " ").split("+")[0].split(".")[0].strip()
+        parts = s.split(" ")[0].split("-")
+        if len(parts) == 3:
+            return f"{parts[0]}/{parts[1]}/{parts[2]}"
+    except Exception:
+        pass
+    return value
+
+
+def _fmt_datetime(value: str) -> str:
+    """ISO 日時 → YYYY/MM/DD HH:MM（秒なし）"""
+    if not value:
+        return "ー"
+    try:
+        s = value.replace("T", " ").split("+")[0].split(".")[0].strip()
+        parts = s.split(" ")
+        date_parts = parts[0].split("-")
+        date_str = f"{date_parts[0]}/{date_parts[1]}/{date_parts[2]}" if len(date_parts) == 3 else parts[0]
+        if len(parts) > 1:
+            t = parts[1].split(":")
+            return f"{date_str} {t[0]}:{t[1]}" if len(t) >= 2 else date_str
+        return date_str
+    except Exception:
+        pass
+    return value
+
+
 PLATFORM_LABELS = {
     "meta": "Meta",
     "google": "Google",
@@ -250,18 +282,12 @@ def render_accounts_toolbar(active_platform: str, query: str) -> str:
 
 
 def render_credentials_toolbar(active_platform: str, query: str) -> str:
-    if active_platform == "meta":
-        add_button = """
-        <form method="post" action="/credentials/reauth-all" style="display:inline">
-          <button class="secondary-btn" type="submit">全て再認証</button>
-        </form>
-        <form method="post" action="/credentials/new" style="display:inline">
-          <input type="hidden" name="platform" value="meta">
-          <input type="hidden" name="auth_type" value="oauth">
-          <button class="primary-btn" type="submit">Meta OAuth で認証</button>
-        </form>"""
-    else:
-        add_button = '<button class="primary-btn" type="button" data-open-credential-modal>新しい認証情報を追加</button>'
+    reauth_all = (
+        '<form method="post" action="/credentials/reauth-all" style="display:inline">'
+        '<button class="secondary-btn" type="submit">全て再認証</button>'
+        '</form>'
+        if active_platform == "meta" else ""
+    )
     return f"""
     <div class="toolbar">
       <form class="search-form" method="get" action="/credentials">
@@ -273,7 +299,8 @@ def render_credentials_toolbar(active_platform: str, query: str) -> str:
         <button class="secondary-btn" type="submit">フィルター</button>
       </form>
       <div class="toolbar-actions">
-        {add_button}
+        {reauth_all}
+        <button class="primary-btn" type="button" data-open-platform-select-modal>認証情報を追加</button>
       </div>
     </div>
     """
@@ -697,6 +724,79 @@ def render_credential_link_modal(
         </div>
       </div>
     </div>
+    """
+
+
+def render_platform_select_modal() -> str:
+    return """
+    <div class="account-link-modal-backdrop" id="platform-select-modal" hidden role="dialog" aria-modal="true" aria-labelledby="platform-select-title">
+      <div class="account-link-modal" style="max-width:420px">
+        <div class="account-link-modal-header">
+          <h2 id="platform-select-title">認証情報を追加</h2>
+          <button class="account-link-close" type="button" id="platform-select-close">×</button>
+        </div>
+        <div class="account-link-modal-body" style="padding:1.5rem">
+          <p style="margin:0 0 1.25rem;color:#555">認証するプラットフォームを選択してください。</p>
+          <div class="platform-choice-grid compact" style="margin-bottom:1.5rem">
+            <button type="button" class="platform-choice-card" data-platform-select="meta">
+              <span class="platform-choice-icon">∞</span>
+              <span class="platform-choice-label">Meta</span>
+            </button>
+            <button type="button" class="platform-choice-card" data-platform-select="google">
+              <span class="platform-choice-icon">G</span>
+              <span class="platform-choice-label">Google</span>
+            </button>
+            <button type="button" class="platform-choice-card" data-platform-select="tiktok">
+              <span class="platform-choice-icon">♪</span>
+              <span class="platform-choice-label">TikTok</span>
+            </button>
+          </div>
+          <form method="post" action="/credentials/new" id="platform-select-form">
+            <input type="hidden" name="auth_type" value="oauth">
+            <input type="hidden" name="platform" id="platform-select-value" value="">
+            <div style="display:flex;justify-content:flex-end;gap:.75rem">
+              <button type="button" class="secondary-btn" id="platform-select-cancel">キャンセル</button>
+              <button type="submit" class="primary-btn" id="platform-select-ok" disabled>OK</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    <script>
+    (() => {
+      const modal = document.getElementById('platform-select-modal');
+      const openBtns = document.querySelectorAll('[data-open-platform-select-modal]');
+      const closeBtn = document.getElementById('platform-select-close');
+      const cancelBtn = document.getElementById('platform-select-cancel');
+      const okBtn = document.getElementById('platform-select-ok');
+      const platformInput = document.getElementById('platform-select-value');
+      const platformCards = modal.querySelectorAll('[data-platform-select]');
+
+      function openModal() { modal.hidden = false; document.body.classList.add('modal-open'); }
+      function closeModal() {
+        modal.hidden = true;
+        document.body.classList.remove('modal-open');
+        platformCards.forEach(c => c.classList.remove('selected'));
+        platformInput.value = '';
+        okBtn.disabled = true;
+      }
+
+      openBtns.forEach(b => b.addEventListener('click', openModal));
+      closeBtn.addEventListener('click', closeModal);
+      cancelBtn.addEventListener('click', closeModal);
+      modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
+
+      platformCards.forEach(card => {
+        card.addEventListener('click', () => {
+          platformCards.forEach(c => c.classList.remove('selected'));
+          card.classList.add('selected');
+          platformInput.value = card.dataset.platformSelect;
+          okBtn.disabled = false;
+        });
+      });
+    })();
+    </script>
     """
 
 
@@ -1637,24 +1737,19 @@ def render_credentials_page(
     toolbar = render_credentials_toolbar(active_platform, query)
     table_rows = []
     for row in rows:
-        expiry = row["auth_expiry"] or "ー"
-        auth_type_label = AUTH_TYPE_LABELS.get(row["auth_type"] or "manual", row["auth_type"] or "manual")
         table_rows.append(
             f"""
             <tr>
               <td>{escape(row["profile_name"])}</td>
-              <td>{escape(row["profile_identifier"])}</td>
-              <td><span class="badge neutral">{escape(auth_type_label)}</span></td>
               <td><span class="badge green">{escape(row["status"])}</span></td>
-              <td>{escape(expiry)}</td>
-              <td><span class="pill">{escape(row["creator_email"])}</span></td>
-              <td>{escape(row["created_at"])}</td>
-              <td>{escape(row["updated_at"])}</td>
-              <td class="action-cell actions-inline">
-                <form method="post" action="/credentials/{row["id"]}/reauth?platform={escape(active_platform)}&q={escape(query)}">
+              <td>{_fmt_date(str(row["auth_expiry"] or ""))}</td>
+              <td style="white-space:nowrap">{escape(row["creator_email"])}</td>
+              <td style="white-space:nowrap">{_fmt_datetime(str(row["created_at"] or ""))}</td>
+              <td class="action-cell" style="white-space:nowrap">
+                <form method="post" action="/credentials/{row["id"]}/reauth?platform={escape(active_platform)}&q={escape(query)}" style="display:inline">
                   <button class="secondary-btn slim" type="submit">再認証</button>
                 </form>
-                <form method="post" action="/credentials/{row["id"]}/delete?platform={escape(active_platform)}&q={escape(query)}">
+                <form method="post" action="/credentials/{row["id"]}/delete?platform={escape(active_platform)}&q={escape(query)}" style="display:inline">
                   <button class="danger-link outlined" type="submit">削除</button>
                 </form>
               </td>
@@ -1672,22 +1767,20 @@ def render_credentials_page(
           <thead>
             <tr>
               <th>認証プロフィール</th>
-              <th>認証プロフィールID</th>
-              <th>認証方式</th>
               <th>ステータス</th>
               <th>認証期限</th>
               <th>作成者</th>
               <th>作成日時</th>
-              <th>更新日時</th>
               <th>アクション</th>
             </tr>
           </thead>
           <tbody>
-            {''.join(table_rows) if table_rows else '<tr><td colspan="9" class="empty">該当する認証情報がありません。</td></tr>'}
+            {''.join(table_rows) if table_rows else '<tr><td colspan="6" class="empty">該当する認証情報がありません。</td></tr>'}
           </tbody>
         </table>
       </div>
     </section>
+    {render_platform_select_modal()}
     {render_credential_link_modal(active_platform, credential_modal_state)}
     {render_credential_modal_script()}
     """
