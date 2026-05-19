@@ -1204,6 +1204,54 @@ def application(environ, start_response):
             },
         )
 
+    if path == "/jobs/daily-sync" and method in {"GET", "POST"}:
+        settings = REPOSITORY.get_integration_settings()
+        configured_token = settings.get("job_trigger_token", "").strip()
+        supplied_token = (
+            environ.get("HTTP_X_FREDCORE_JOB_TOKEN", "").strip()
+            or query_param(environ, "token", "")
+        )
+        cron_secret = os.environ.get("CRON_SECRET", "").strip()
+        auth_header = environ.get("HTTP_AUTHORIZATION", "").strip()
+        token_allowed = bool(configured_token) and supplied_token == configured_token
+        cron_allowed = bool(cron_secret) and auth_header == f"Bearer {cron_secret}"
+        if (configured_token or cron_secret) and not (token_allowed or cron_allowed):
+            return respond_json(
+                start_response,
+                {"ok": False, "error": "invalid job token"},
+                "403 Forbidden",
+            )
+
+        report_date = query_param(environ, "report_date", "")
+        results = {}
+        for platform, run_job in [
+            ("meta", lambda: run_meta_monthly_sync_job(
+                settings=settings, repository=REPOSITORY, project_root=PROJECT_ROOT,
+                report_date_input=report_date, trigger_source="cron",
+            )),
+            ("google", lambda: run_google_ads_monthly_sync_job(
+                settings=settings, repository=REPOSITORY, project_root=PROJECT_ROOT,
+                report_date_input=report_date, trigger_source="cron",
+            )),
+            ("tiktok", lambda: run_tiktok_monthly_sync_job(
+                settings=settings, repository=REPOSITORY, project_root=PROJECT_ROOT,
+                report_date_input=report_date, trigger_source="cron",
+            )),
+        ]:
+            try:
+                job = run_job()
+                r = job.result
+                results[platform] = {
+                    "ok": True,
+                    "sync_run_id": job.sync_run_id,
+                    "report_date": r.report_date,
+                    "row_count": r.row_count,
+                }
+            except Exception as exc:
+                results[platform] = {"ok": False, "error": str(exc)}
+
+        return respond_json(start_response, {"ok": True, "results": results}, "200 OK")
+
     if path == "/jobs/meta/daily-sync" and method in {"GET", "POST"}:
         settings = REPOSITORY.get_integration_settings()
         configured_token = settings.get("job_trigger_token", "").strip()

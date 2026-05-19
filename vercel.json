@@ -2,16 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "path": "/jobs/meta/daily-sync",
+      "path": "/jobs/daily-sync",
       "schedule": "0 1 * * *"
-    },
-    {
-      "path": "/jobs/google/daily-sync",
-      "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/jobs/tiktok/daily-sync",
-      "schedule": "0 3 * * *"
     }
   ]
 }
