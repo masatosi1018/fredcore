@@ -312,7 +312,7 @@ def render_credentials_response(
 def start_credential_oauth_flow(form: dict):
     settings = REPOSITORY.get_integration_settings()
     platform = form["platform"].strip()
-    auth_type = form.get("auth_type", "manual").strip() or "manual"
+    auth_type = form.get("auth_type", "oauth").strip() or "oauth"
     payload = {
         "platform": platform,
         "auth_type": auth_type,
@@ -322,6 +322,8 @@ def start_credential_oauth_flow(form: dict):
         "auth_expiry": form.get("auth_expiry", "").strip(),
         "external_user_id": form.get("external_user_id", "").strip(),
         "token_expires_at": form.get("token_expires_at", "").strip(),
+        "reauth_credential_id": form.get("reauth_credential_id", "").strip(),
+        "next_reauth_ids": form.get("next_reauth_ids", "").strip(),
     }
     state = create_oauth_state()
     expires_at = (datetime.now(timezone.utc) + timedelta(minutes=15)).replace(microsecond=0).isoformat()
@@ -392,25 +394,56 @@ def complete_credential_oauth(platform: str, *, state: str, code: str) -> str:
         or profile.profile_identifier
     )
     auth_expiry = token.token_expires_at or str(payload.get("auth_expiry") or "").strip()
-
-    REPOSITORY.create_credential(
+    meta_json = metadata_json_for_oauth(
         platform=platform,
-        profile_name=profile_name,
-        profile_identifier=profile_identifier,
-        creator_email=creator_email,
-        auth_expiry=auth_expiry,
         auth_type=str(state_row["auth_type"] or "oauth"),
-        external_user_id=profile.external_user_id,
-        access_token=token.access_token,
-        refresh_token=token.refresh_token,
-        token_expires_at=token.token_expires_at,
-        metadata_json=metadata_json_for_oauth(
-            platform=platform,
-            auth_type=str(state_row["auth_type"] or "oauth"),
-            profile=profile,
-            token=token,
-        ),
+        profile=profile,
+        token=token,
     )
+
+    reauth_credential_id = str(payload.get("reauth_credential_id") or "").strip()
+    if reauth_credential_id:
+        REPOSITORY.update_credential_token(
+            int(reauth_credential_id),
+            profile_name=profile_name,
+            profile_identifier=profile_identifier,
+            access_token=token.access_token,
+            refresh_token=token.refresh_token or "",
+            token_expires_at=token.token_expires_at or "",
+            auth_expiry=auth_expiry,
+            metadata_json=meta_json,
+        )
+    else:
+        REPOSITORY.create_credential(
+            platform=platform,
+            profile_name=profile_name,
+            profile_identifier=profile_identifier,
+            creator_email=creator_email,
+            auth_expiry=auth_expiry,
+            auth_type=str(state_row["auth_type"] or "oauth"),
+            external_user_id=profile.external_user_id,
+            access_token=token.access_token,
+            refresh_token=token.refresh_token,
+            token_expires_at=token.token_expires_at,
+            metadata_json=meta_json,
+        )
+
+    next_reauth_ids = str(payload.get("next_reauth_ids") or "").strip()
+    if next_reauth_ids:
+        ids = [x for x in next_reauth_ids.split(",") if x.strip()]
+        if ids:
+            next_id = ids[0].strip()
+            remaining = ",".join(ids[1:])
+            next_credential = REPOSITORY.get_credential(int(next_id))
+            if next_credential:
+                next_url = start_credential_oauth_flow({
+                    "platform": str(next_credential["platform"]),
+                    "auth_type": str(next_credential["auth_type"] or "oauth"),
+                    "reauth_credential_id": next_id,
+                    "next_reauth_ids": remaining,
+                })
+                return next_url  # signal to caller to redirect to next OAuth
+
     return profile_name or profile.profile_name
 
 
@@ -894,7 +927,7 @@ def application(environ, start_response):
                 error="Meta OAuth のコールバックに必要な情報が不足しています。",
             )
         try:
-            profile_name = complete_credential_oauth("meta", state=state, code=code)
+            result = complete_credential_oauth("meta", state=state, code=code)
         except Exception as exc:
             return redirect_to(
                 start_response,
@@ -902,11 +935,13 @@ def application(environ, start_response):
                 platform="meta",
                 error=str(exc),
             )
+        if result.startswith("https://"):
+            return redirect(start_response, result)
         return redirect_to(
             start_response,
             "/credentials",
             platform="meta",
-            notice=f"{profile_name} の Meta 認証情報を追加しました。",
+            notice=f"{result} の Meta 認証情報を更新しました。",
         )
 
     if path == "/report-sheets/new" and method == "POST":
@@ -978,16 +1013,50 @@ def application(environ, start_response):
             notice=message,
         )
 
+    if path == "/credentials/reauth-all" and method == "POST":
+        oauth_credentials = [
+            r for r in REPOSITORY.list_credentials("meta")
+            if str(r["auth_type"] or "") == "oauth"
+        ]
+        if not oauth_credentials:
+            return redirect_to(
+                start_response, "/credentials", platform="meta",
+                error="再認証対象の Meta OAuth 認証情報がありません。",
+            )
+        ids = [str(r["id"]) for r in oauth_credentials]
+        try:
+            authorization_url = start_credential_oauth_flow({
+                "platform": "meta",
+                "auth_type": "oauth",
+                "reauth_credential_id": ids[0],
+                "next_reauth_ids": ",".join(ids[1:]),
+            })
+        except Exception as exc:
+            return redirect_to(
+                start_response, "/credentials", platform="meta", error=str(exc),
+            )
+        return redirect(start_response, authorization_url)
+
     if path.startswith("/credentials/") and path.endswith("/reauth") and method == "POST":
         credential_id = int(path.split("/")[2])
-        REPOSITORY.reauth_credential(credential_id)
-        return redirect_to(
-            start_response,
-            "/credentials",
-            platform=platform,
-            q=query,
-            notice="再認証フラグを更新しました。",
-        )
+        credential = REPOSITORY.get_credential(credential_id)
+        if credential is None or str(credential["auth_type"] or "") != "oauth":
+            return redirect_to(
+                start_response, "/credentials", platform=platform, q=query,
+                error="この認証情報は OAuth 再認証に対応していません。",
+            )
+        try:
+            authorization_url = start_credential_oauth_flow({
+                "platform": str(credential["platform"]),
+                "auth_type": "oauth",
+                "reauth_credential_id": str(credential_id),
+                "next_reauth_ids": "",
+            })
+        except Exception as exc:
+            return redirect_to(
+                start_response, "/credentials", platform=platform, q=query, error=str(exc),
+            )
+        return redirect(start_response, authorization_url)
 
     if path.startswith("/credentials/") and path.endswith("/delete") and method == "POST":
         credential_id = int(path.split("/")[2])

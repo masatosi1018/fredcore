@@ -252,7 +252,10 @@ def render_accounts_toolbar(active_platform: str, query: str) -> str:
 def render_credentials_toolbar(active_platform: str, query: str) -> str:
     if active_platform == "meta":
         add_button = """
-        <form method="post" action="/credentials/new">
+        <form method="post" action="/credentials/reauth-all" style="display:inline">
+          <button class="secondary-btn" type="submit">全て再認証</button>
+        </form>
+        <form method="post" action="/credentials/new" style="display:inline">
           <input type="hidden" name="platform" value="meta">
           <input type="hidden" name="auth_type" value="oauth">
           <button class="primary-btn" type="submit">Meta OAuth で認証</button>

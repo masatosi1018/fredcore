@@ -669,16 +669,40 @@ class AdminRepository:
                 ),
             )
 
-    def reauth_credential(self, credential_id: int) -> None:
+    def update_credential_token(
+        self,
+        credential_id: int,
+        *,
+        profile_name: str,
+        profile_identifier: str,
+        access_token: str,
+        refresh_token: str = "",
+        token_expires_at: str = "",
+        auth_expiry: str = "",
+        metadata_json: str = "{}",
+    ) -> None:
         now = utc_now()
         with self.connect() as connection:
             connection.execute(
                 """
                 UPDATE credential_profiles
-                SET status = '正常', updated_at = ?
+                SET profile_name = ?, profile_identifier = ?,
+                    access_token = ?, refresh_token = ?,
+                    token_expires_at = ?, auth_expiry = ?,
+                    metadata_json = ?, status = '正常', updated_at = ?
                 WHERE id = ?
                 """,
-                (now, credential_id),
+                (
+                    profile_name,
+                    profile_identifier,
+                    access_token or None,
+                    refresh_token or None,
+                    token_expires_at or None,
+                    auth_expiry or None,
+                    metadata_json or "{}",
+                    now,
+                    credential_id,
+                ),
             )
 
     def delete_credential(self, credential_id: int) -> None:

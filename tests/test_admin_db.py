@@ -69,11 +69,18 @@ class AdminRepositoryTest(unittest.TestCase):
         self.assertEqual(rows[0]["sync_status"], "未同期")
         self.assertEqual(rows[0]["selection_source"], "manual")
 
-    def test_reauth_updates_status(self):
+    def test_update_credential_token(self):
         credential = self.repository.list_credentials("google")[0]
-        self.repository.reauth_credential(credential["id"])
+        self.repository.update_credential_token(
+            credential["id"],
+            profile_name="Updated Name",
+            profile_identifier="updated@example.com",
+            access_token="new-token-xyz",
+        )
         refreshed = self.repository.list_credentials("google")[0]
         self.assertEqual(refreshed["status"], "正常")
+        self.assertEqual(refreshed["profile_name"], "Updated Name")
+        self.assertEqual(str(refreshed["access_token"]), "new-token-xyz")
 
     def test_save_and_load_integration_settings(self):
         self.repository.save_integration_settings(
