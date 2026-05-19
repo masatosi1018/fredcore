@@ -825,18 +825,11 @@ def application(environ, start_response):
             try:
                 authorization_url = start_credential_oauth_flow(form)
             except Exception as exc:
-                return render_credentials_response(
+                return redirect_to(
                     start_response,
+                    "/credentials",
                     platform=form.get("platform", platform),
-                    query=query,
                     error=str(exc),
-                    status="400 Bad Request",
-                    modal_state={
-                        "open": True,
-                        "step": 3,
-                        **form,
-                        "error": str(exc),
-                    },
                 )
             return redirect(start_response, authorization_url)
 
