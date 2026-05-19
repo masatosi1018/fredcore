@@ -1,13 +1,11 @@
 import tempfile
 import unittest
-from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
 from app.admin_db import AdminRepository
-from app.models import DailySpendRecord
 from app.models import CampaignPerformanceRecord
-from app.sync_jobs import run_meta_daily_sync_job, run_meta_monthly_sync_job
+from app.sync_jobs import run_meta_monthly_sync_job
 
 
 class FakeMetaCampaignClient:
@@ -71,34 +69,6 @@ class FakeSheetManager:
         }
 
 
-class FakeMetaDailyClient:
-    def __init__(self, access_token, graph_api_version, timeout_seconds):
-        self.access_token = access_token
-
-    def fetch_account_daily_spend(self, account_id, report_date):
-        return DailySpendRecord(
-            report_date=report_date,
-            account_id=account_id,
-            account_name=f"Account {account_id}",
-            currency="JPY",
-            spend=Decimal("123.45"),
-            timezone_name="Asia/Tokyo",
-            fetched_at="2026-05-12T00:00:00+00:00",
-        )
-
-
-class FakeMetaDailySheetsClient:
-    def __init__(self, service_account_file, spreadsheet_id, sheet_name):
-        self.rows = []
-
-    def ensure_header(self):
-        return None
-
-    def upsert_rows(self, keyed_rows):
-        self.rows = list(keyed_rows)
-        return (0, len(self.rows))
-
-
 class SyncJobsTest(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -130,8 +100,6 @@ class SyncJobsTest(unittest.TestCase):
             "meta_graph_api_version": "v22.0",
             "meta_request_timeout_seconds": "30",
             "google_service_account_file": "service.json",
-            "google_spreadsheet_id": "sheet-daily-1",
-            "google_sheet_name": "Meta Daily Spend",
             "google_reports_folder_id": "folder-123",
             "google_monthly_report_sheet_tab_name": "キャンペーン一覧",
             "report_timezone": "Asia/Tokyo",
@@ -156,43 +124,6 @@ class SyncJobsTest(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["status"], "成功")
         self.assertEqual(rows[0]["trigger_source"], "cron")
-
-    def test_run_meta_daily_sync_job_uses_oauth_token_and_updates_account(self):
-        report_date = date.today().isoformat()
-        job = run_meta_daily_sync_job(
-            self.repository,
-            settings=self.settings,
-            project_root=Path(self.temp_dir.name),
-            report_date_input=report_date,
-            trigger_source="cron",
-            meta_client_factory=FakeMetaDailyClient,
-            sheets_client_factory=FakeMetaDailySheetsClient,
-        )
-        self.assertEqual(job.result.row_count, 1)
-        self.assertEqual(job.result.failure_count, 0)
-        account = self.repository.list_accounts("meta")[0]
-        self.assertEqual(account["sync_status"], "同期済み")
-        self.assertEqual(account["last_synced_report_date"], report_date)
-        rows = self.repository.list_sync_runs()
-        self.assertEqual(rows[0]["job_name"], "meta_daily_spend_sync")
-        self.assertEqual(rows[0]["status"], "成功")
-
-    def test_run_meta_daily_sync_job_can_force_single_historical_date(self):
-        job = run_meta_daily_sync_job(
-            self.repository,
-            settings=self.settings,
-            project_root=Path(self.temp_dir.name),
-            report_date_input="2000-01-01",
-            trigger_source="manual",
-            force_single_report_date=True,
-            meta_client_factory=FakeMetaDailyClient,
-            sheets_client_factory=FakeMetaDailySheetsClient,
-        )
-        self.assertEqual(job.result.row_count, 1)
-        self.assertEqual(job.result.failure_count, 0)
-        account = self.repository.list_accounts("meta")[0]
-        self.assertEqual(account["sync_status"], "同期済み")
-        self.assertIsNone(account["last_synced_report_date"])
 
     def test_run_meta_monthly_sync_job_records_failure(self):
         with self.assertRaises(RuntimeError):

@@ -217,8 +217,8 @@ def sync_meta_campaigns_to_monthly_sheet(
                     compose_campaign_row_key(
                         record.report_date,
                         record.platform,
-                        record.account_id,
-                        record.campaign_id,
+                        record.account_name,
+                        record.campaign_name,
                     ),
                     build_campaign_report_row(record),
                 )

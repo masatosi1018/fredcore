@@ -20,7 +20,7 @@ from app.admin_db import AdminRepository, DEFAULT_PLATFORM, SUPPORTED_PLATFORMS
 from app.config import ConfigError
 from app.dates import default_target_date
 from app.meta_api import MetaApiError, MetaClient
-from app.meta_sync import INTEGRATION_DEFAULTS, MetaSheetSyncConfig, sync_meta_accounts_to_sheet
+from app.meta_sync import INTEGRATION_DEFAULTS
 from app.oauth_clients import (
     OAuthError,
     build_google_authorization_url,

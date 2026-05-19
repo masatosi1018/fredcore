@@ -7,7 +7,7 @@ from typing import Callable, Dict, List, Sequence, Tuple
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
-from app.transform import SHEET_HEADERS, row_key_from_values
+from app.transform import campaign_row_key_from_values
 
 
 def _quote_sheet_name(sheet_name: str) -> str:
@@ -129,6 +129,13 @@ class GoogleSheetsTableClient:
         self.headers = list(headers)
         self.row_key_factory = row_key_factory
         self.range_end = _column_label(len(self.headers))
+        self.write_column_count = len(self.headers)
+
+    def _pad_row(self, row: Sequence[str]) -> List[str]:
+        values = list(row)
+        if len(values) < self.write_column_count:
+            values.extend([""] * (self.write_column_count - len(values)))
+        return values
 
     def ensure_sheet_exists(self) -> None:
         spreadsheet = (
@@ -177,6 +184,9 @@ class GoogleSheetsTableClient:
             .execute()
         )
         existing = result.get("values", [])
+        existing_width = len(existing[0]) if existing else 0
+        self.write_column_count = max(len(self.headers), existing_width)
+        self.range_end = _column_label(self.write_column_count)
         if existing and existing[0] == self.headers:
             return
 
@@ -187,7 +197,7 @@ class GoogleSheetsTableClient:
                 spreadsheetId=self.spreadsheet_id,
                 range=f"{self.sheet_ref}!A1:{self.range_end}1",
                 valueInputOption="RAW",
-                body={"values": [self.headers]},
+                body={"values": [self._pad_row(self.headers)]},
             )
             .execute()
         )
@@ -219,16 +229,17 @@ class GoogleSheetsTableClient:
         appends = []
 
         for key, row in keyed_rows:
+            padded_row = self._pad_row(row)
             if key in row_map:
                 row_number = row_map[key]
                 updates.append(
                     {
                         "range": f"{self.sheet_ref}!A{row_number}:{self.range_end}{row_number}",
-                        "values": [row],
+                        "values": [padded_row],
                     }
                 )
             else:
-                appends.append(row)
+                appends.append(padded_row)
 
         if updates:
             (
@@ -261,12 +272,3 @@ class GoogleSheetsTableClient:
         return len(updates), len(appends)
 
 
-class GoogleSheetsClient(GoogleSheetsTableClient):
-    def __init__(self, service_account_file: str, spreadsheet_id: str, sheet_name: str):
-        super().__init__(
-            service_account_file=service_account_file,
-            spreadsheet_id=spreadsheet_id,
-            sheet_name=sheet_name,
-            headers=SHEET_HEADERS,
-            row_key_factory=row_key_from_values,
-        )

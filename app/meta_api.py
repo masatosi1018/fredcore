@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 
 import requests
 
-from app.models import CampaignPerformanceRecord, DailySpendRecord
+from app.models import CampaignPerformanceRecord
 
 
 class MetaApiError(RuntimeError):
@@ -20,45 +20,6 @@ class MetaClient:
         self.graph_api_version = graph_api_version
         self.timeout_seconds = timeout_seconds
         self.session = requests.Session()
-
-    def fetch_account_daily_spend(
-        self,
-        account_id: str,
-        report_date: str,
-    ) -> DailySpendRecord:
-        account = self._get(
-            f"/act_{account_id}",
-            params={
-                "fields": "id,name,currency,timezone_name",
-            },
-        )
-        insights = self._get(
-            f"/act_{account_id}/insights",
-            params={
-                "fields": "account_id,account_name,spend,date_start,date_stop",
-                "time_range": json.dumps({"since": report_date, "until": report_date}),
-                "level": "account",
-                "limit": "1",
-            },
-        )
-
-        rows = insights.get("data", [])
-        insight_row = rows[0] if rows else {}
-        spend = Decimal(str(insight_row.get("spend", "0")))
-        fetched_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
-        return DailySpendRecord(
-            report_date=report_date,
-            account_id=str(insight_row.get("account_id") or account.get("id") or account_id),
-            account_name=str(insight_row.get("account_name") or account.get("name") or ""),
-            currency=str(
-                account.get("currency")
-                or ""
-            ),
-            spend=spend,
-            timezone_name=str(account.get("timezone_name") or ""),
-            fetched_at=fetched_at,
-        )
 
     def fetch_account_daily_campaigns(
         self,
