@@ -463,6 +463,19 @@ def application(environ, start_response):
     if path == "/":
         return redirect(start_response, f"/accounts?platform={platform}")
 
+    if path == "/api/health" and method == "GET":
+        return respond_json(
+            start_response,
+            {
+                "ok": True,
+                "database_backend": REPOSITORY.backend,
+                "app_base_url": (
+                    REPOSITORY.get_integration_settings().get("app_base_url", "").strip()
+                    or os.environ.get("FREDCORE_APP_BASE_URL", "").strip()
+                ),
+            },
+        )
+
     if path == "/api/account-candidates" and method == "GET":
         requested_platform = query_param(environ, "platform", platform).strip() or platform
         credential_profile_id = query_param(environ, "credential_profile_id", "").strip()

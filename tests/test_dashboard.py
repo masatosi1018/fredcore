@@ -124,6 +124,12 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual(response["status"], "400 Bad Request")
         self.assertIn("Meta の認証プロフィールを選択してください", response["body"])
 
+    def test_health_endpoint_reports_backend(self):
+        response = self.request("/api/health")
+        self.assertEqual(response["status"], "200 OK")
+        self.assertIn('"ok": true', response["body"])
+        self.assertIn('"database_backend": "sqlite"', response["body"])
+
     def test_post_credential_create_saves_auth_type(self):
         response = self.request(
             "/credentials/new",
