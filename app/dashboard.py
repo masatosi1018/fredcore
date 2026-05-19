@@ -34,7 +34,7 @@ from app.oauth_clients import (
     meta_oauth_config,
     metadata_json_for_oauth,
 )
-from app.sync_jobs import run_meta_monthly_sync_job
+from app.sync_jobs import run_google_ads_monthly_sync_job, run_meta_monthly_sync_job
 from app.admin_views import (
     render_accounts_page,
     render_credentials_page,
@@ -1171,6 +1171,59 @@ def application(environ, start_response):
         report_date = query_param(environ, "report_date", "")
         try:
             job = run_meta_monthly_sync_job(
+                settings=settings,
+                repository=REPOSITORY,
+                project_root=PROJECT_ROOT,
+                report_date_input=report_date,
+                trigger_source="cron",
+            )
+        except Exception as exc:
+            return respond_json(
+                start_response,
+                {"ok": False, "error": str(exc)},
+                "500 Internal Server Error",
+            )
+
+        result = job.result
+        return respond_json(
+            start_response,
+            {
+                "ok": True,
+                "sync_run_id": job.sync_run_id,
+                "report_date": result.report_date,
+                "month_key": result.month_key,
+                "account_count": result.account_count,
+                "row_count": result.row_count,
+                "updated_count": result.updated_count,
+                "appended_count": result.appended_count,
+                "spreadsheet_url": result.spreadsheet_url,
+                "spreadsheet_title": result.spreadsheet_title,
+                "created_spreadsheet": result.created_spreadsheet,
+            },
+            "200 OK",
+        )
+
+    if path == "/jobs/google/daily-sync" and method in {"GET", "POST"}:
+        settings = REPOSITORY.get_integration_settings()
+        configured_token = settings.get("job_trigger_token", "").strip()
+        supplied_token = (
+            environ.get("HTTP_X_FREDCORE_JOB_TOKEN", "").strip()
+            or query_param(environ, "token", "")
+        )
+        cron_secret = os.environ.get("CRON_SECRET", "").strip()
+        auth_header = environ.get("HTTP_AUTHORIZATION", "").strip()
+        token_allowed = bool(configured_token) and supplied_token == configured_token
+        cron_allowed = bool(cron_secret) and auth_header == f"Bearer {cron_secret}"
+        if (configured_token or cron_secret) and not (token_allowed or cron_allowed):
+            return respond_json(
+                start_response,
+                {"ok": False, "error": "invalid job token"},
+                "403 Forbidden",
+            )
+
+        report_date = query_param(environ, "report_date", "")
+        try:
+            job = run_google_ads_monthly_sync_job(
                 settings=settings,
                 repository=REPOSITORY,
                 project_root=PROJECT_ROOT,

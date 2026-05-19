@@ -2084,6 +2084,10 @@ def render_settings_page(values, *, notice: str = "", error: str = "") -> bytes:
         <label>Google OAuth クライアントシークレット
           <input type="text" name="google_oauth_client_secret" value="{escape(merged['google_oauth_client_secret'])}">
         </label>
+        <label>Google Ads デベロッパートークン
+          <input type="text" name="google_ads_developer_token" value="{escape(merged['google_ads_developer_token'])}">
+        </label>
+        <div class="settings-inline-note">Google Cloud Console で作成した OAuth クライアントID / シークレットと、Google Ads API の開発者トークンが必要です。</div>
         <label>Meta App ID
           <input type="text" name="meta_app_id" value="{escape(merged['meta_app_id'])}">
         </label>

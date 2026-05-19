@@ -209,6 +209,35 @@ def fetch_google_profile(
     )
 
 
+def refresh_google_access_token(
+    config: OAuthAppConfig,
+    refresh_token: str,
+    *,
+    session: Optional[requests.Session] = None,
+) -> OAuthTokenPayload:
+    http = session or requests.Session()
+    response = http.post(
+        GOOGLE_TOKEN_URL,
+        data={
+            "grant_type": "refresh_token",
+            "client_id": config.client_id,
+            "client_secret": config.client_secret,
+            "refresh_token": refresh_token,
+        },
+        timeout=30,
+    )
+    payload = _json_or_error(response, "Google token refresh failed.")
+    access_token = str(payload.get("access_token") or "").strip()
+    if not access_token:
+        raise OAuthError("Google トークンの更新に失敗しました。")
+    return OAuthTokenPayload(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_expires_at=_expiry_from_seconds(payload.get("expires_in")),
+        raw_payload=payload,
+    )
+
+
 def exchange_meta_code(
     config: OAuthAppConfig,
     *,
