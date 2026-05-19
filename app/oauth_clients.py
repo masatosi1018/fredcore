@@ -29,7 +29,6 @@ META_DEFAULT_OAUTH_SCOPES = (
     "ads_read",
     "ads_management",
     "business_management",
-    "email",
 )
 
 
@@ -269,7 +268,7 @@ def fetch_meta_profile(
     response = http.get(
         f"https://graph.facebook.com/{config.graph_api_version}/me",
         params={
-            "fields": "id,name,email",
+            "fields": "id,name",
             "access_token": token.access_token,
         },
         timeout=30,
