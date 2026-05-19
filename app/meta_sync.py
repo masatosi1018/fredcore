@@ -56,12 +56,12 @@ def _bool_value(raw_value: str) -> bool:
 
 def merged_integration_settings(values: Mapping[str, str]) -> dict:
     merged = dict(INTEGRATION_DEFAULTS)
+    for key, value in values.items():
+        merged[key] = value
     for key, env_name in INTEGRATION_ENV_MAP.items():
         env_value = os.getenv(env_name)
         if env_value is not None and env_value.strip():
             merged[key] = env_value.strip()
-    for key, value in values.items():
-        merged[key] = value
     return merged
 
 
