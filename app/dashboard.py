@@ -1399,6 +1399,67 @@ def application(environ, start_response):
             "200 OK",
         )
 
+    if path == "/api/accounts/discover" and method == "GET":
+        platform = query_param(environ, "platform", "")
+        credential_id_raw = query_param(environ, "credential_id", "")
+        def json_response(data, status="200 OK"):
+            body = json.dumps(data, ensure_ascii=False).encode()
+            start_response(status, [
+                ("Content-Type", "application/json; charset=utf-8"),
+                ("Content-Length", str(len(body))),
+            ])
+            return [body]
+        if not platform or not credential_id_raw:
+            return json_response({"error": "platform と credential_id が必要です"}, "400 Bad Request")
+        try:
+            credential = REPOSITORY.get_credential(int(credential_id_raw))
+        except (ValueError, Exception):
+            return json_response({"error": "認証情報が見つかりません"}, "404 Not Found")
+        if not credential or credential["platform"] != platform:
+            return json_response({"error": "認証情報が見つかりません"}, "404 Not Found")
+        linked_ids = {row["account_identifier"] for row in REPOSITORY.list_accounts(platform)}
+        if platform == "google":
+            from app.campaign_sync import MonthlyCampaignSyncConfig, _get_google_access_token
+            from app.google_ads_api import GoogleAdsClient, GoogleAdsError
+            try:
+                cfg = MonthlyCampaignSyncConfig.from_mapping(get_config(), project_root=PROJECT_ROOT)
+                access_token = _get_google_access_token(credential, cfg)
+                client = GoogleAdsClient(
+                    access_token=access_token,
+                    developer_token=cfg.google_ads_developer_token,
+                )
+                accounts = client.list_accessible_customers()
+                return json_response({
+                    "accounts": [
+                        {**a, "is_linked": a["account_id"] in linked_ids}
+                        for a in accounts
+                    ]
+                })
+            except Exception as exc:
+                return json_response({"error": str(exc)}, "500 Internal Server Error")
+        if platform == "meta":
+            from app.meta_api import MetaClient
+            _settings = get_config()
+            token = str(credential.get("access_token") or _settings.get("meta_access_token") or "").strip()
+            if not token:
+                return json_response({"error": "Meta アクセストークンがありません"}, "400 Bad Request")
+            try:
+                graph_api_version = _settings.get("meta_graph_api_version", "v22.0") or "v22.0"
+                raw_accounts = MetaClient(access_token=token, graph_api_version=graph_api_version).fetch_accessible_ad_accounts()
+                return json_response({
+                    "accounts": [
+                        {
+                            "account_id": a["account_identifier"],
+                            "account_name": a["account_name"],
+                            "is_linked": a["account_identifier"] in linked_ids,
+                        }
+                        for a in raw_accounts
+                    ]
+                })
+            except Exception as exc:
+                return json_response({"error": str(exc)}, "500 Internal Server Error")
+        return json_response({"error": "このプラットフォームは未対応です"}, "400 Bad Request")
+
     return respond_html(start_response, b"Not Found", "404 Not Found")
 
 

@@ -5,7 +5,7 @@ from typing import Dict, Iterable, Optional
 from urllib.parse import urlencode
 
 from app.admin_db import DEFAULT_PLATFORM, SUPPORTED_PLATFORMS
-from app.account_linking import ACCOUNT_LINK_FLOW, list_discoverable_accounts
+from app.account_linking import ACCOUNT_LINK_FLOW
 from app.meta_sync import merged_integration_settings
 
 
@@ -456,45 +456,7 @@ def render_account_link_modal(
             """
         )
 
-        account_items = []
-        for account in list_discoverable_accounts(platform):
-            account_id = account["account_identifier"]
-            is_linked_account = account_id in linked_ids_by_platform[platform]
-            checked = " checked" if account_id in selected_account_ids else ""
-            disabled = " disabled" if is_linked_account else ""
-            linked_badge = (
-                '<span class="badge warn">連携済み</span>'
-                if is_linked_account
-                else ""
-            )
-            search_text = escape(
-                f'{account["account_name"]} {account["account_identifier"]}'.lower()
-            )
-            account_items.append(
-                f"""
-                <label class="account-choice-row" data-account-search="{search_text}">
-                  <input type="checkbox" value="{escape(account_id)}" data-platform="{platform}"{checked}{disabled}>
-                  <div class="account-choice-main">
-                    <div class="account-choice-title">{escape(account["account_name"])}</div>
-                    <div class="account-choice-meta">{escape(account["account_identifier"])}</div>
-                  </div>
-                  <div class="account-choice-side">
-                    <span>{escape(account["parent_account"])}</span>
-                    {linked_badge}
-                  </div>
-                </label>
-                """
-            )
-        linked_account_ids = ",".join(linked_ids_by_platform[platform])
-        account_panels.append(
-            f"""
-            <div class="account-selection-panel"{hidden} data-account-panel="{platform}" data-linked-account-ids="{escape(linked_account_ids)}">
-              <div class="account-selection-scroll">
-                {''.join(account_items)}
-              </div>
-            </div>
-            """
-        )
+        pass  # account panels are now rendered dynamically by JS
 
     modal_error = (
         f'<div class="account-link-error" data-account-link-error>{escape(error_message)}</div>'
@@ -564,7 +526,11 @@ def render_account_link_modal(
                 </div>
                 <button class="secondary-btn slim" type="button" data-account-link-select-all>全選択</button>
               </div>
-              {''.join(account_panels)}
+              <div class="account-selection-panel">
+                <div class="account-link-loading" data-account-link-loading hidden style="padding:2rem;text-align:center;color:#666">取得中...</div>
+                <div class="account-link-error" data-account-discover-error hidden style="padding:1rem;color:#c00"></div>
+                <div class="account-selection-scroll" data-account-dynamic-list></div>
+              </div>
               <div class="account-link-step-actions">
                 <button class="secondary-btn" type="button" data-prev-account-link-step="2">戻る</button>
                 <button class="primary-btn" type="submit">選択したアカウントを連携</button>
@@ -1005,7 +971,6 @@ def render_account_link_modal_script() -> str:
       const progressFill = modal.querySelector('[data-account-link-progress-fill]');
       const platformButtons = modal.querySelectorAll('[data-platform-choice]');
       const authPanels = modal.querySelectorAll('[data-auth-panel]');
-      const accountPanels = modal.querySelectorAll('[data-account-panel]');
       const credentialRadios = modal.querySelectorAll('input[name="credential_profile_choice"]');
       const searchInput = modal.querySelector('[data-account-link-search]');
       const selectAllButton = modal.querySelector('[data-account-link-select-all]');
@@ -1016,16 +981,15 @@ def render_account_link_modal_script() -> str:
       const errorBox = modal.querySelector('[data-account-link-error]');
       const selectedCredentialName = modal.querySelector('[data-selected-credential-name]');
       const authContinueButton = modal.querySelector('[data-auth-continue-button]');
-      const selectedAccountIdsByPlatform = {};
-      const metaAccountCache = {};
-      let metaRequestKey = '';
+      const dynamicList = modal.querySelector('[data-account-dynamic-list]');
+      const loadingEl = modal.querySelector('[data-account-link-loading]');
+      const discoverErrorEl = modal.querySelector('[data-account-discover-error]');
+
+      const accountCache = {};
+      let activeRequestKey = '';
       let isOpen = modal.dataset.open === 'true';
       let currentStep = Number(modal.dataset.step || '1');
       let selectedPlatform = modal.dataset.platform || 'meta';
-
-      accountPanels.forEach((panel) => {
-        selectedAccountIdsByPlatform[panel.dataset.accountPanel] = [...panel.querySelectorAll('input[type="checkbox"]:checked')].map((checkbox) => checkbox.value);
-      });
 
       function clearError() {
         if (!errorBox) return;
@@ -1043,24 +1007,6 @@ def render_account_link_modal_script() -> str:
         return modal.querySelector(`input[name="credential_profile_choice"][data-platform="${selectedPlatform}"]:checked`);
       }
 
-      function currentAccountPanel() {
-        return modal.querySelector(`[data-account-panel="${selectedPlatform}"]`);
-      }
-
-      function selectedAccountIds() {
-        return selectedAccountIdsByPlatform[selectedPlatform] || [];
-      }
-
-      function rememberSelectedAccounts() {
-        const panel = currentAccountPanel();
-        if (!panel) return;
-        selectedAccountIdsByPlatform[selectedPlatform] = [...panel.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)')].map((checkbox) => checkbox.value);
-      }
-
-      function linkedAccountIdsFor(panel) {
-        return new Set((panel.dataset.linkedAccountIds || '').split(',').filter(Boolean));
-      }
-
       function escapeHtml(value) {
         return String(value || '')
           .replace(/&/g, '&amp;')
@@ -1070,92 +1016,66 @@ def render_account_link_modal_script() -> str:
           .replace(/'/g, '&#39;');
       }
 
-      function renderAccountRows(panel, accounts) {
-        const scroll = panel.querySelector('.account-selection-scroll');
-        const linkedIds = linkedAccountIdsFor(panel);
-        const selectedIds = new Set(selectedAccountIds());
+      function renderAccountRows(accounts) {
+        discoverErrorEl.hidden = true;
         if (!accounts.length) {
-          scroll.innerHTML = '<div class="account-selection-empty">連携できる広告アカウントが見つかりませんでした。</div>';
-          selectedAccountIdsByPlatform[selectedPlatform] = [];
+          dynamicList.innerHTML = '<div class="account-selection-empty">連携できる広告アカウントが見つかりませんでした。</div>';
           applySearch();
           updateSelectAllLabel();
           return;
         }
-        scroll.innerHTML = accounts.map((account) => {
-          const accountId = String(account.account_identifier || '').trim();
+        dynamicList.innerHTML = accounts.map((account) => {
+          const accountId = String(account.account_id || '').trim();
           const accountName = String(account.account_name || accountId).trim();
-          const parentAccount = String(account.parent_account || '-').trim() || '-';
           const searchText = `${accountName} ${accountId}`.toLowerCase();
-          const isLinked = linkedIds.has(accountId);
-          const isChecked = selectedIds.has(accountId);
+          const isLinked = !!account.is_linked;
           return `
             <label class="account-choice-row" data-account-search="${escapeHtml(searchText)}">
-              <input type="checkbox" value="${escapeHtml(accountId)}" data-platform="${escapeHtml(selectedPlatform)}"${isChecked ? ' checked' : ''}${isLinked ? ' disabled' : ''}>
+              <input type="checkbox" value="${escapeHtml(accountId)}" data-platform="${escapeHtml(selectedPlatform)}"${isLinked ? ' disabled' : ''}>
               <div class="account-choice-main">
                 <div class="account-choice-title">${escapeHtml(accountName)}</div>
                 <div class="account-choice-meta">${escapeHtml(accountId)}</div>
               </div>
               <div class="account-choice-side">
-                <span>${escapeHtml(parentAccount)}</span>
                 ${isLinked ? '<span class="badge warn">連携済み</span>' : ''}
               </div>
             </label>
           `;
         }).join('');
-        rememberSelectedAccounts();
         applySearch();
         updateSelectAllLabel();
       }
 
-      function renderAccountLoading(panel, message) {
-        const scroll = panel.querySelector('.account-selection-scroll');
-        scroll.innerHTML = `<div class="account-selection-empty">${escapeHtml(message)}</div>`;
-      }
-
-      function loadMetaAccounts() {
-        const panel = currentAccountPanel();
+      function loadAccounts() {
         const credential = selectedCredential();
-        if (!panel || selectedPlatform !== 'meta' || !credential) {
-          return Promise.resolve();
+        if (!credential) return;
+        const cacheKey = `${selectedPlatform}:${credential.value}`;
+        if (accountCache[cacheKey]) {
+          renderAccountRows(accountCache[cacheKey]);
+          return;
         }
-        if (panel.dataset.loadedCredentialId === credential.value && metaAccountCache[credential.value]) {
-          renderAccountRows(panel, metaAccountCache[credential.value]);
-          return Promise.resolve();
-        }
-        const requestKey = `meta:${credential.value}`;
-        if (metaRequestKey === requestKey) {
-          return Promise.resolve();
-        }
-        metaRequestKey = requestKey;
-        renderAccountLoading(panel, 'Meta から広告アカウントを取得しています...');
-        const params = new URLSearchParams({
-          platform: 'meta',
-          credential_profile_id: credential.value,
-        });
-        return fetch(`/api/account-candidates?${params.toString()}`)
-          .then(async (response) => {
-            const payload = await response.json().catch(() => ({}));
-            if (!response.ok || !payload.ok) {
-              throw new Error(payload.error || 'Meta の広告アカウント取得に失敗しました。');
-            }
-            metaAccountCache[credential.value] = payload.accounts || [];
-            if (selectedPlatform === 'meta' && selectedCredential() && selectedCredential().value === credential.value) {
-              panel.dataset.loadedCredentialId = credential.value;
-              renderAccountRows(panel, metaAccountCache[credential.value]);
-              if (payload.credential_profile_name) {
-                selectedCredentialName.textContent = payload.credential_profile_name;
-              }
+        if (activeRequestKey === cacheKey) return;
+        activeRequestKey = cacheKey;
+        dynamicList.innerHTML = '';
+        loadingEl.hidden = false;
+        discoverErrorEl.hidden = true;
+        const params = new URLSearchParams({ platform: selectedPlatform, credential_id: credential.value });
+        fetch(`/api/accounts/discover?${params}`)
+          .then(async (res) => {
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.error) throw new Error(data.error || 'アカウント取得に失敗しました。');
+            accountCache[cacheKey] = data.accounts || [];
+            if (activeRequestKey === cacheKey) {
+              renderAccountRows(accountCache[cacheKey]);
             }
           })
-          .catch((error) => {
-            panel.dataset.loadedCredentialId = '';
-            renderAccountLoading(panel, 'Meta の広告アカウントを表示できませんでした。');
-            showError(error.message || 'Meta の広告アカウント取得に失敗しました。');
+          .catch((err) => {
+            discoverErrorEl.textContent = err.message;
+            discoverErrorEl.hidden = false;
           })
           .finally(() => {
-            if (metaRequestKey === requestKey) {
-              metaRequestKey = '';
-            }
+            loadingEl.hidden = true;
+            if (activeRequestKey === cacheKey) activeRequestKey = '';
           });
       }
 
@@ -1168,25 +1088,16 @@ def render_account_link_modal_script() -> str:
       }
 
       function applySearch() {
-        const panel = currentAccountPanel();
-        if (!panel) return;
         const term = (searchInput.value || '').trim().toLowerCase();
-        panel.querySelectorAll('.account-choice-row').forEach((row) => {
-          const haystack = row.dataset.accountSearch || '';
-          row.hidden = term ? !haystack.includes(term) : false;
+        dynamicList.querySelectorAll('.account-choice-row').forEach((row) => {
+          row.hidden = term ? !(row.dataset.accountSearch || '').includes(term) : false;
         });
       }
 
       function updateSelectAllLabel() {
-        const panel = currentAccountPanel();
-        if (!panel) return;
-        const boxes = [...panel.querySelectorAll('input[type="checkbox"]:not(:disabled)')].filter((box) => !box.closest('.account-choice-row').hidden);
-        if (!boxes.length) {
-          selectAllButton.textContent = '全選択';
-          return;
-        }
-        const allChecked = boxes.every((box) => box.checked);
-        selectAllButton.textContent = allChecked ? '選択解除' : '全選択';
+        const boxes = [...dynamicList.querySelectorAll('input[type="checkbox"]:not(:disabled)')].filter((b) => !b.closest('.account-choice-row').hidden);
+        if (!boxes.length) { selectAllButton.textContent = '全選択'; return; }
+        selectAllButton.textContent = boxes.every((b) => b.checked) ? '選択解除' : '全選択';
       }
 
       function updateView() {
@@ -1196,50 +1107,34 @@ def render_account_link_modal_script() -> str:
           section.hidden = Number(section.dataset.accountLinkStep) !== currentStep;
         });
         progressSteps.forEach((step) => {
-          const stepNumber = Number(step.dataset.progressStep);
-          step.classList.toggle('active', stepNumber === currentStep);
-          step.classList.toggle('done', stepNumber < currentStep);
+          const n = Number(step.dataset.progressStep);
+          step.classList.toggle('active', n === currentStep);
+          step.classList.toggle('done', n < currentStep);
         });
         progressFill.style.width = `${((currentStep - 1) / 2) * 100}%`;
-        platformButtons.forEach((button) => {
-          button.classList.toggle('selected', button.dataset.platformChoice === selectedPlatform);
+        platformButtons.forEach((btn) => {
+          btn.classList.toggle('selected', btn.dataset.platformChoice === selectedPlatform);
         });
         authPanels.forEach((panel) => {
           panel.hidden = panel.dataset.authPanel !== selectedPlatform;
-        });
-        accountPanels.forEach((panel) => {
-          panel.hidden = panel.dataset.accountPanel !== selectedPlatform;
         });
         platformInput.value = selectedPlatform;
         updateCredentialSummary();
         authContinueButton.disabled = !selectedCredential();
         applySearch();
         updateSelectAllLabel();
-        if (currentStep === 3 && selectedPlatform === 'meta' && selectedCredential()) {
-          loadMetaAccounts();
+        if (currentStep === 3 && selectedCredential()) {
+          loadAccounts();
         }
       }
 
-      function openModal() {
-        isOpen = true;
-        clearError();
-        updateView();
-      }
+      function openModal() { isOpen = true; clearError(); updateView(); }
+      function closeModal() { isOpen = false; updateView(); }
+      function goToStep(n) { currentStep = n; clearError(); updateView(); }
 
-      function closeModal() {
-        isOpen = false;
-        updateView();
-      }
-
-      function goToStep(stepNumber) {
-        currentStep = stepNumber;
-        clearError();
-        updateView();
-      }
-
-      platformButtons.forEach((button) => {
-        button.addEventListener('click', () => {
-          selectedPlatform = button.dataset.platformChoice;
+      platformButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          selectedPlatform = btn.dataset.platformChoice;
           searchInput.value = '';
           clearError();
           updateView();
@@ -1248,111 +1143,55 @@ def render_account_link_modal_script() -> str:
 
       credentialRadios.forEach((radio) => {
         radio.addEventListener('change', () => {
-          rememberSelectedAccounts();
           selectedPlatform = radio.dataset.platform;
           clearError();
           updateView();
         });
       });
 
-      openButtons.forEach((button) => {
-        button.addEventListener('click', () => {
-          openModal();
-        });
-      });
+      openButtons.forEach((btn) => btn.addEventListener('click', openModal));
+      closeButtons.forEach((btn) => btn.addEventListener('click', closeModal));
 
-      closeButtons.forEach((button) => {
-        button.addEventListener('click', () => {
-          closeModal();
-        });
-      });
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen) closeModal(); });
 
-      modal.addEventListener('click', (event) => {
-        if (event.target === modal) {
-          closeModal();
-        }
-      });
-
-      document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && isOpen) {
-          closeModal();
-        }
-      });
-
-      modal.querySelector('[data-next-account-link-step="2"]').addEventListener('click', () => {
-        goToStep(2);
-      });
+      modal.querySelector('[data-next-account-link-step="2"]').addEventListener('click', () => goToStep(2));
 
       modal.querySelector('[data-next-account-link-step="3"]').addEventListener('click', () => {
-        if (!selectedCredential()) {
-          showError('認証プロフィールを選択してください。');
-          return;
-        }
+        if (!selectedCredential()) { showError('認証プロフィールを選択してください。'); return; }
         goToStep(3);
-        if (selectedPlatform === 'meta') {
-          loadMetaAccounts();
-        }
       });
 
-      modal.querySelectorAll('[data-prev-account-link-step]').forEach((button) => {
-        button.addEventListener('click', () => {
-          goToStep(Number(button.dataset.prevAccountLinkStep));
-        });
+      modal.querySelectorAll('[data-prev-account-link-step]').forEach((btn) => {
+        btn.addEventListener('click', () => goToStep(Number(btn.dataset.prevAccountLinkStep)));
       });
 
-      searchInput.addEventListener('input', () => {
-        applySearch();
-        updateSelectAllLabel();
-      });
+      searchInput.addEventListener('input', () => { applySearch(); updateSelectAllLabel(); });
 
       selectAllButton.addEventListener('click', () => {
-        const panel = currentAccountPanel();
-        if (!panel) return;
-        const boxes = [...panel.querySelectorAll('input[type="checkbox"]:not(:disabled)')].filter((box) => !box.closest('.account-choice-row').hidden);
+        const boxes = [...dynamicList.querySelectorAll('input[type="checkbox"]:not(:disabled)')].filter((b) => !b.closest('.account-choice-row').hidden);
         if (!boxes.length) return;
-        const allChecked = boxes.every((box) => box.checked);
-        boxes.forEach((box) => {
-          box.checked = !allChecked;
-        });
-        rememberSelectedAccounts();
+        const allChecked = boxes.every((b) => b.checked);
+        boxes.forEach((b) => { b.checked = !allChecked; });
         updateSelectAllLabel();
       });
 
-      accountPanels.forEach((panel) => {
-        panel.addEventListener('change', (event) => {
-          if (event.target.matches('.account-choice-row input[type="checkbox"]')) {
-            rememberSelectedAccounts();
-            updateSelectAllLabel();
-          }
-        });
+      dynamicList.addEventListener('change', (e) => {
+        if (e.target.matches('input[type="checkbox"]')) updateSelectAllLabel();
       });
 
-      modal.querySelectorAll('.account-choice-row input[type="checkbox"]').forEach((checkbox) => {
-        checkbox.addEventListener('change', () => {
-          rememberSelectedAccounts();
-          updateSelectAllLabel();
-        });
-      });
-
-      submitForm.addEventListener('submit', (event) => {
+      submitForm.addEventListener('submit', (e) => {
         const credential = selectedCredential();
         if (!credential) {
-          event.preventDefault();
-          showError('認証プロフィールを選択してください。');
-          goToStep(2);
-          return;
+          e.preventDefault(); showError('認証プロフィールを選択してください。'); goToStep(2); return;
         }
-        const panel = currentAccountPanel();
-        const selectedAccounts = [...panel.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)')].map((checkbox) => checkbox.value);
-        if (!selectedAccounts.length) {
-          event.preventDefault();
-          showError('連携する広告アカウントを1件以上選択してください。');
-          return;
+        const selected = [...dynamicList.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)')].map((b) => b.value);
+        if (!selected.length) {
+          e.preventDefault(); showError('連携する広告アカウントを1件以上選択してください。'); return;
         }
         platformInput.value = selectedPlatform;
         credentialInput.value = credential.value;
-        rememberSelectedAccounts();
-        accountsInput.value = selectedAccounts.join(',');
+        accountsInput.value = selected.join(',');
       });
 
       updateView();

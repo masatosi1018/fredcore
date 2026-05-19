@@ -81,6 +81,53 @@ class GoogleAdsClient:
             raise GoogleAdsError(f"Google Ads API error: {message}")
         return response.json()
 
+    def _get(self, path: str) -> Dict[str, Any]:
+        response = self.session.get(
+            f"{GOOGLE_ADS_BASE_URL}/{path}",
+            headers=self._headers(),
+            timeout=self.timeout_seconds,
+        )
+        if not response.ok:
+            try:
+                error_body = response.json()
+            except ValueError:
+                raise GoogleAdsError(
+                    f"Google Ads API error ({response.status_code}): {response.text[:400]}"
+                )
+            error_detail = error_body.get("error", {})
+            message = (
+                error_detail.get("message") or str(error_body)
+                if isinstance(error_detail, dict)
+                else str(error_detail or error_body)
+            )
+            raise GoogleAdsError(f"Google Ads API error: {message}")
+        return response.json()
+
+    def list_accessible_customers(self) -> List[Dict[str, str]]:
+        """Return all ad accounts accessible to the authenticated user."""
+        data = self._get("customers:listAccessibleCustomers")
+        resource_names = data.get("resourceNames", [])
+        customers = []
+        for resource_name in resource_names:
+            customer_id = resource_name.split("/")[-1]
+            try:
+                result = self._search(
+                    customer_id,
+                    "SELECT customer.id, customer.descriptive_name FROM customer LIMIT 1",
+                )
+                rows = result.get("results", [])
+                if rows:
+                    customer = rows[0].get("customer", {})
+                    customers.append({
+                        "account_id": str(customer.get("id") or customer_id),
+                        "account_name": str(customer.get("descriptiveName") or customer_id),
+                    })
+                else:
+                    customers.append({"account_id": customer_id, "account_name": customer_id})
+            except GoogleAdsError:
+                customers.append({"account_id": customer_id, "account_name": customer_id})
+        return customers
+
     def fetch_account_daily_campaigns(
         self,
         customer_id: str,
