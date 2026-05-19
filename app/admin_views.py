@@ -426,10 +426,15 @@ def render_account_link_modal(
             f"<li>{escape(point)}</li>"
             for point in flow["auth_points"]
         )
-        notice_body = "".join(
-            f"<p>{escape(line)}</p>"
-            for line in flow["notice_body"]
-        )
+        notice_lines = flow.get("notice_body", [])
+        notice_block = ""
+        if notice_lines:
+            notice_body = "".join(f"<p>{escape(line)}</p>" for line in notice_lines)
+            notice_block = f"""
+              <div class="auth-notice-card">
+                <h3>{escape(flow["notice_title"])}</h3>
+                {notice_body}
+              </div>"""
         auth_panels.append(
             f"""
             <section class="account-link-stage-panel"{hidden} data-auth-panel="{platform}">
@@ -439,7 +444,6 @@ def render_account_link_modal(
                 <p>{escape(flow["auth_description"])}</p>
               </div>
               <div class="auth-info-card">
-                <h3>認証について</h3>
                 <ul>
                   {auth_points}
                 </ul>
@@ -447,10 +451,7 @@ def render_account_link_modal(
               <div class="credential-choice-list">
                 {''.join(credential_items)}
               </div>
-              <div class="auth-notice-card">
-                <h3>{escape(flow["notice_title"])}</h3>
-                {notice_body}
-              </div>
+              {notice_block}
             </section>
             """
         )
