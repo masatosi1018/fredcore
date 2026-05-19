@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
@@ -153,11 +154,12 @@ class SyncJobsTest(unittest.TestCase):
         self.assertEqual(rows[0]["trigger_source"], "cron")
 
     def test_run_meta_daily_sync_job_uses_oauth_token_and_updates_account(self):
+        report_date = date.today().isoformat()
         job = run_meta_daily_sync_job(
             self.repository,
             settings=self.settings,
             project_root=Path(self.temp_dir.name),
-            report_date_input="2026-05-12",
+            report_date_input=report_date,
             trigger_source="cron",
             meta_client_factory=FakeMetaDailyClient,
             sheets_client_factory=FakeMetaDailySheetsClient,
@@ -166,7 +168,7 @@ class SyncJobsTest(unittest.TestCase):
         self.assertEqual(job.result.failure_count, 0)
         account = self.repository.list_accounts("meta")[0]
         self.assertEqual(account["sync_status"], "同期済み")
-        self.assertEqual(account["last_synced_report_date"], "2026-05-12")
+        self.assertEqual(account["last_synced_report_date"], report_date)
         rows = self.repository.list_sync_runs()
         self.assertEqual(rows[0]["job_name"], "meta_daily_spend_sync")
         self.assertEqual(rows[0]["status"], "成功")

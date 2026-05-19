@@ -52,7 +52,14 @@ STATIC_DIR = PROJECT_ROOT / "static"
 _REPOSITORY_READY = False
 
 
-def resolve_database_path(project_root: Path) -> Path:
+def resolve_database_target(project_root: Path):
+    database_url = (
+        os.environ.get("FREDCORE_DATABASE_URL", "").strip()
+        or os.environ.get("DATABASE_URL", "").strip()
+        or os.environ.get("POSTGRES_URL", "").strip()
+    )
+    if database_url:
+        return database_url
     configured_path = os.environ.get("FREDCORE_DATABASE_PATH", "").strip()
     if configured_path:
         database_path = Path(configured_path)
@@ -62,8 +69,8 @@ def resolve_database_path(project_root: Path) -> Path:
     return project_root / "data" / "fredcore.db"
 
 
-DATABASE_PATH = resolve_database_path(PROJECT_ROOT)
-REPOSITORY = AdminRepository(DATABASE_PATH)
+DATABASE_TARGET = resolve_database_target(PROJECT_ROOT)
+REPOSITORY = AdminRepository(DATABASE_TARGET)
 MONTH_KEY_PATTERN = re.compile(r"^\d{4}-\d{2}$")
 WATCHED_DIRECTORIES = ("app", "static", "config", "tests")
 WATCHED_FILES = ("README.md", "requirements.txt", ".env.example")

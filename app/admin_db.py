@@ -5,7 +5,14 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union
+
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+except ImportError:  # pragma: no cover - optional in sqlite-only environments
+    psycopg = None
+    dict_row = None
 
 
 SUPPORTED_PLATFORMS = ("meta", "google", "tiktok")
@@ -33,146 +40,58 @@ def extract_spreadsheet_id(raw_value: str) -> str:
 
 
 class AdminRepository:
-    def __init__(self, database_path: Path):
-        self.database_path = database_path
-        self.database_path.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self, database_target: Union[Path, str]):
+        target = str(database_target)
+        self.database_url = target.strip() if self._is_postgres_dsn(target) else ""
+        self.database_path = (
+            None
+            if self.database_url
+            else Path(database_target)
+        )
+        if self.database_path is not None:
+            self.database_path.parent.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _is_postgres_dsn(value: str) -> bool:
+        normalized = value.strip().lower()
+        return normalized.startswith("postgres://") or normalized.startswith("postgresql://")
+
+    @property
+    def backend(self) -> str:
+        return "postgres" if self.database_url else "sqlite"
+
+    def _translate_sql(self, sql: str) -> str:
+        if self.backend != "postgres":
+            return sql
+        return sql.replace("?", "%s")
+
+    def _connect_postgres(self):
+        if psycopg is None:
+            raise RuntimeError(
+                "Postgres を使うには psycopg が必要です。requirements.txt を再インストールしてください。"
+            )
+        return psycopg.connect(self.database_url, row_factory=dict_row)
 
     @contextmanager
-    def connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(str(self.database_path))
-        connection.row_factory = sqlite3.Row
+    def connect(self) -> Iterator[Any]:
+        if self.backend == "postgres":
+            connection = self._connect_postgres()
+        else:
+            connection = sqlite3.connect(str(self.database_path))
+            connection.row_factory = sqlite3.Row
         try:
-            yield connection
+            yield _ConnectionAdapter(connection, self.backend, self._translate_sql)
             connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
         finally:
             connection.close()
 
     def initialize(self) -> None:
         with self.connect() as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS credential_profiles (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    platform TEXT NOT NULL,
-                    profile_name TEXT NOT NULL,
-                    profile_identifier TEXT NOT NULL,
-                    status TEXT NOT NULL DEFAULT '正常',
-                    auth_expiry TEXT,
-                    auth_type TEXT NOT NULL DEFAULT 'manual',
-                    external_user_id TEXT,
-                    access_token TEXT,
-                    refresh_token TEXT,
-                    token_expires_at TEXT,
-                    metadata_json TEXT NOT NULL DEFAULT '{}',
-                    creator_email TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS linked_accounts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    platform TEXT NOT NULL,
-                    account_name TEXT NOT NULL,
-                    account_identifier TEXT NOT NULL,
-                    timezone_name TEXT NOT NULL,
-                    credential_profile_id INTEGER,
-                    operator_email TEXT NOT NULL,
-                    parent_account TEXT NOT NULL DEFAULT '-',
-                    selection_source TEXT NOT NULL DEFAULT 'manual',
-                    sync_enabled INTEGER NOT NULL DEFAULT 1,
-                    sync_status TEXT NOT NULL DEFAULT '未同期',
-                    last_synced_at TEXT,
-                    last_synced_report_date TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    FOREIGN KEY (credential_profile_id) REFERENCES credential_profiles(id)
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS integration_settings (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS monthly_report_sheets (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    month_key TEXT NOT NULL UNIQUE,
-                    spreadsheet_id TEXT NOT NULL,
-                    spreadsheet_url TEXT NOT NULL,
-                    spreadsheet_title TEXT NOT NULL,
-                    status TEXT NOT NULL DEFAULT '有効',
-                    notes TEXT NOT NULL DEFAULT '',
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS automation_rules (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    platform TEXT NOT NULL,
-                    rule_name TEXT NOT NULL,
-                    target_label TEXT NOT NULL,
-                    metric_name TEXT NOT NULL,
-                    condition_operator TEXT NOT NULL DEFAULT '>=',
-                    threshold_value TEXT NOT NULL,
-                    action_type TEXT NOT NULL,
-                    action_value TEXT NOT NULL DEFAULT '',
-                    status TEXT NOT NULL DEFAULT '有効',
-                    owner_email TEXT NOT NULL,
-                    notes TEXT NOT NULL DEFAULT '',
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS oauth_states (
-                    state TEXT PRIMARY KEY,
-                    platform TEXT NOT NULL,
-                    auth_type TEXT NOT NULL,
-                    payload_json TEXT NOT NULL,
-                    code_verifier TEXT NOT NULL DEFAULT '',
-                    created_at TEXT NOT NULL,
-                    expires_at TEXT NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS sync_runs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    job_name TEXT NOT NULL,
-                    platform TEXT NOT NULL,
-                    trigger_source TEXT NOT NULL DEFAULT 'manual',
-                    report_date TEXT NOT NULL,
-                    month_key TEXT NOT NULL DEFAULT '',
-                    status TEXT NOT NULL DEFAULT '実行中',
-                    account_count INTEGER NOT NULL DEFAULT 0,
-                    row_count INTEGER NOT NULL DEFAULT 0,
-                    updated_count INTEGER NOT NULL DEFAULT 0,
-                    appended_count INTEGER NOT NULL DEFAULT 0,
-                    spreadsheet_url TEXT NOT NULL DEFAULT '',
-                    spreadsheet_title TEXT NOT NULL DEFAULT '',
-                    error_message TEXT NOT NULL DEFAULT '',
-                    started_at TEXT NOT NULL,
-                    finished_at TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
+            for statement in self._create_table_statements():
+                connection.execute(statement)
             self._ensure_column(
                 connection,
                 "credential_profiles",
@@ -240,17 +159,148 @@ class AdminRepository:
                 "TEXT",
             )
 
+    def _create_table_statements(self) -> List[str]:
+        if self.backend == "postgres":
+            id_column = "BIGSERIAL PRIMARY KEY"
+        else:
+            id_column = "INTEGER PRIMARY KEY AUTOINCREMENT"
+        return [
+            f"""
+            CREATE TABLE IF NOT EXISTS credential_profiles (
+                id {id_column},
+                platform TEXT NOT NULL,
+                profile_name TEXT NOT NULL,
+                profile_identifier TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT '正常',
+                auth_expiry TEXT,
+                auth_type TEXT NOT NULL DEFAULT 'manual',
+                external_user_id TEXT,
+                access_token TEXT,
+                refresh_token TEXT,
+                token_expires_at TEXT,
+                metadata_json TEXT NOT NULL DEFAULT '{{}}',
+                creator_email TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """,
+            f"""
+            CREATE TABLE IF NOT EXISTS linked_accounts (
+                id {id_column},
+                platform TEXT NOT NULL,
+                account_name TEXT NOT NULL,
+                account_identifier TEXT NOT NULL,
+                timezone_name TEXT NOT NULL,
+                credential_profile_id BIGINT,
+                operator_email TEXT NOT NULL,
+                parent_account TEXT NOT NULL DEFAULT '-',
+                selection_source TEXT NOT NULL DEFAULT 'manual',
+                sync_enabled INTEGER NOT NULL DEFAULT 1,
+                sync_status TEXT NOT NULL DEFAULT '未同期',
+                last_synced_at TEXT,
+                last_synced_report_date TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (credential_profile_id) REFERENCES credential_profiles(id)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS integration_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """,
+            f"""
+            CREATE TABLE IF NOT EXISTS monthly_report_sheets (
+                id {id_column},
+                month_key TEXT NOT NULL UNIQUE,
+                spreadsheet_id TEXT NOT NULL,
+                spreadsheet_url TEXT NOT NULL,
+                spreadsheet_title TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT '有効',
+                notes TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """,
+            f"""
+            CREATE TABLE IF NOT EXISTS automation_rules (
+                id {id_column},
+                platform TEXT NOT NULL,
+                rule_name TEXT NOT NULL,
+                target_label TEXT NOT NULL,
+                metric_name TEXT NOT NULL,
+                condition_operator TEXT NOT NULL DEFAULT '>=',
+                threshold_value TEXT NOT NULL,
+                action_type TEXT NOT NULL,
+                action_value TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT '有効',
+                owner_email TEXT NOT NULL,
+                notes TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS oauth_states (
+                state TEXT PRIMARY KEY,
+                platform TEXT NOT NULL,
+                auth_type TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                code_verifier TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL
+            )
+            """,
+            f"""
+            CREATE TABLE IF NOT EXISTS sync_runs (
+                id {id_column},
+                job_name TEXT NOT NULL,
+                platform TEXT NOT NULL,
+                trigger_source TEXT NOT NULL DEFAULT 'manual',
+                report_date TEXT NOT NULL,
+                month_key TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT '実行中',
+                account_count INTEGER NOT NULL DEFAULT 0,
+                row_count INTEGER NOT NULL DEFAULT 0,
+                updated_count INTEGER NOT NULL DEFAULT 0,
+                appended_count INTEGER NOT NULL DEFAULT 0,
+                spreadsheet_url TEXT NOT NULL DEFAULT '',
+                spreadsheet_title TEXT NOT NULL DEFAULT '',
+                error_message TEXT NOT NULL DEFAULT '',
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """,
+        ]
+
     def _ensure_column(
         self,
-        connection: sqlite3.Connection,
+        connection: Any,
         table_name: str,
         column_name: str,
         definition: str,
     ) -> None:
-        existing_columns = {
-            row["name"]
-            for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
-        }
+        if self.backend == "postgres":
+            existing_columns = {
+                row["column_name"]
+                for row in connection.execute(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = ?
+                    """,
+                    (table_name,),
+                ).fetchall()
+            }
+        else:
+            existing_columns = {
+                row["name"]
+                for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+            }
         if column_name in existing_columns:
             return
         connection.execute(
@@ -455,7 +505,7 @@ class AdminRepository:
                     ON linked_accounts.credential_profile_id = credential_profiles.id
                 {clause}
                 {search_clause}
-                ORDER BY linked_accounts.account_name COLLATE NOCASE ASC
+                ORDER BY LOWER(linked_accounts.account_name) ASC, linked_accounts.account_name ASC
                 """,
                 params,
             ).fetchall()
@@ -468,7 +518,7 @@ class AdminRepository:
                 SELECT id, profile_name, platform
                 FROM credential_profiles
                 {clause}
-                ORDER BY profile_name COLLATE NOCASE ASC
+                ORDER BY LOWER(profile_name) ASC, profile_name ASC
                 """,
                 params,
             ).fetchall()
@@ -514,7 +564,7 @@ class AdminRepository:
                 FROM automation_rules
                 {clause}
                 {search_clause}
-                ORDER BY updated_at DESC, rule_name COLLATE NOCASE ASC
+                ORDER BY updated_at DESC, LOWER(rule_name) ASC, rule_name ASC
                 """,
                 params,
             ).fetchall()
@@ -842,6 +892,27 @@ class AdminRepository:
     ) -> int:
         now = utc_now()
         with self.connect() as connection:
+            if self.backend == "postgres":
+                row = connection.execute(
+                    """
+                    INSERT INTO sync_runs (
+                        job_name, platform, trigger_source, report_date, month_key, status,
+                        started_at, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, '実行中', ?, ?, ?)
+                    RETURNING id
+                    """,
+                    (
+                        job_name,
+                        platform,
+                        trigger_source,
+                        report_date,
+                        month_key,
+                        now,
+                        now,
+                        now,
+                    ),
+                ).fetchone()
+                return int(row["id"])
             cursor = connection.execute(
                 """
                 INSERT INTO sync_runs (
@@ -939,3 +1010,16 @@ class AdminRepository:
                 """,
                 [(key, value, now) for key, value in settings.items()],
             )
+
+
+class _ConnectionAdapter:
+    def __init__(self, connection: Any, backend: str, translator):
+        self._connection = connection
+        self.backend = backend
+        self._translator = translator
+
+    def execute(self, sql: str, params: Iterable[Any] = ()):
+        return self._connection.execute(self._translator(sql), params)
+
+    def executemany(self, sql: str, seq_of_params):
+        return self._connection.executemany(self._translator(sql), seq_of_params)

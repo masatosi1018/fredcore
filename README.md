@@ -54,18 +54,19 @@ Vercel にデプロイする場合、Python の WSGI エントリポイントと
 
 Vercel の Flask/Python ドキュメントでは、トップレベルの `server.py` / `index.py` / `app.py` などにある `app` を自動検出する形が案内されています。このリポジトリは `server.py` に合わせています。
 
-ただし、このプロジェクトは今 `SQLite` を前提にしているため、Vercel 上では永続ディスクを使えません。現状のままでは `FREDCORE_DATABASE_PATH` 未指定時に `/tmp/fredcore.db` を使うため、データはインスタンス再起動やスケール時に消える前提です。
+このプロジェクトは `FREDCORE_DATABASE_URL` または `DATABASE_URL` / `POSTGRES_URL` があれば Postgres を優先して使います。未設定時だけ SQLite を使います。
 
 つまり現段階の Vercel デプロイは:
 
-- 画面表示や UI 確認には使える
-- 永続的な認証情報保存や OAuth state 保存には本番向きではない
+- Postgres をつなげば本番向けの永続保存に進める
+- DB 未設定のままなら UI 確認用の一時 SQLite 動作になる
 
-本番運用するなら、将来的に外部DBへ切り替える必要があります。
+本番運用するなら、Vercel Marketplace の Postgres を接続して `DATABASE_URL` 系の環境変数を使ってください。
 
 Vercel で最低限そろえる値:
 
-- `FREDCORE_DATABASE_PATH=/tmp/fredcore.db` 省略可
+- `FREDCORE_DATABASE_URL` または `DATABASE_URL` / `POSTGRES_URL`
+- `FREDCORE_DATABASE_PATH=/tmp/fredcore.db` は DB 未接続時だけのフォールバック
 - `VERCEL=1` 自動付与
 - `FREDCORE_APP_BASE_URL=https://fredcore.vercel.app`
 - `CRON_SECRET=<ランダムな長い文字列>`
@@ -73,6 +74,7 @@ Vercel で最低限そろえる値:
 よく使う Vercel Environment Variables:
 
 - `FREDCORE_APP_BASE_URL`
+- `FREDCORE_DATABASE_URL` または `DATABASE_URL` / `POSTGRES_URL`
 - `META_APP_ID`
 - `META_APP_SECRET`
 - `META_ACCESS_TOKEN`
@@ -87,8 +89,9 @@ Vercel で最低限そろえる値:
 2. Root Directory はそのまま
 3. Python Version は `3.12`
 4. Environment Variables に `FREDCORE_APP_BASE_URL=https://<本番ドメイン>` を設定
-5. 必要に応じて `META_APP_ID` / `META_APP_SECRET` なども設定
-6. Deploy 後、Meta 側の OAuth リダイレクト URI に `https://<本番ドメイン>/oauth/meta/callback` を登録
+5. Marketplace の Postgres を追加して `DATABASE_URL` 系を確認
+6. 必要に応じて `META_APP_ID` / `META_APP_SECRET` なども設定
+7. Deploy 後、Meta 側の OAuth リダイレクト URI に `https://<本番ドメイン>/oauth/meta/callback` を登録
 
 ### Vercel Cron
 
@@ -104,7 +107,7 @@ Vercel で最低限そろえる値:
 補足:
 
 - 互換性のため、認証プロフィールにトークンが無いアカウントだけ `meta_access_token` をフォールバックで使います
-- ただし Vercel 上で SQLite のままだと永続化が弱いため、毎日確実に継続運用するには外部DB化が必要です
+- Postgres 接続前は SQLite フォールバックで動くため、本番では必ず Postgres をつないでください
 
 ## 2. 画面
 
