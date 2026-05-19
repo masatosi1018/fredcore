@@ -1019,7 +1019,17 @@ class _ConnectionAdapter:
         self._translator = translator
 
     def execute(self, sql: str, params: Iterable[Any] = ()):
-        return self._connection.execute(self._translator(sql), params)
+        translated_sql = self._translator(sql)
+        if hasattr(self._connection, "execute"):
+            return self._connection.execute(translated_sql, params)
+        cursor = self._connection.cursor()
+        cursor.execute(translated_sql, params)
+        return cursor
 
     def executemany(self, sql: str, seq_of_params):
-        return self._connection.executemany(self._translator(sql), seq_of_params)
+        translated_sql = self._translator(sql)
+        if hasattr(self._connection, "executemany"):
+            return self._connection.executemany(translated_sql, seq_of_params)
+        cursor = self._connection.cursor()
+        cursor.executemany(translated_sql, seq_of_params)
+        return cursor
