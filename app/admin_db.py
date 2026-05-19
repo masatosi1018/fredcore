@@ -16,7 +16,7 @@ except ImportError:  # pragma: no cover - optional in sqlite-only environments
 
 
 SUPPORTED_PLATFORMS = ("meta", "google", "tiktok")
-DEFAULT_PLATFORM = "google"
+DEFAULT_PLATFORM = "meta"
 LEGACY_DEMO_CREDENTIAL_IDENTIFIERS = (
     "ryo.cip.fred@gmail.com",
     "dymfred003@gmail.com",
