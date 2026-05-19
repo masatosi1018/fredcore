@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 from typing import Callable, Dict, List, Sequence, Tuple
 
 from google.oauth2.service_account import Credentials
@@ -13,9 +15,26 @@ def _quote_sheet_name(sheet_name: str) -> str:
     return f"'{escaped}'"
 
 
+def _service_account_credentials(service_account_file: str, *, scopes: Sequence[str]):
+    raw_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+    if raw_json:
+        try:
+            service_account_info = json.loads(raw_json)
+        except json.JSONDecodeError as exc:  # pragma: no cover - invalid production config
+            raise ValueError("GOOGLE_SERVICE_ACCOUNT_JSON の JSON 形式が不正です。") from exc
+        return Credentials.from_service_account_info(
+            service_account_info,
+            scopes=list(scopes),
+        )
+    return Credentials.from_service_account_file(
+        service_account_file,
+        scopes=list(scopes),
+    )
+
+
 class GoogleDriveSheetsManager:
     def __init__(self, service_account_file: str):
-        credentials = Credentials.from_service_account_file(
+        credentials = _service_account_credentials(
             service_account_file,
             scopes=[
                 "https://www.googleapis.com/auth/drive",
@@ -97,7 +116,7 @@ class GoogleSheetsTableClient:
         headers: Sequence[str],
         row_key_factory: Callable[[Sequence[str]], str],
     ):
-        credentials = Credentials.from_service_account_file(
+        credentials = _service_account_credentials(
             service_account_file,
             scopes=[
                 "https://www.googleapis.com/auth/spreadsheets",
