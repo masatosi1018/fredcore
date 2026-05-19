@@ -31,6 +31,10 @@ META_DEFAULT_OAUTH_SCOPES = (
     "business_management",
 )
 
+TIKTOK_AUTH_URL = "https://ads.tiktok.com/marketing_api/auth"
+TIKTOK_TOKEN_URL = "https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/"
+TIKTOK_USERINFO_URL = "https://business-api.tiktok.com/open_api/v1.3/user/info/"
+
 
 class OAuthError(RuntimeError):
     """Raised when an OAuth flow cannot be completed."""
@@ -331,6 +335,102 @@ def metadata_json_for_oauth(
             "token": dict(token.raw_payload),
         },
         ensure_ascii=False,
+    )
+
+
+def tiktok_oauth_config(settings: Mapping[str, str]) -> OAuthAppConfig:
+    merged = merged_integration_settings(settings)
+    app_id = merged.get("tiktok_app_id", "").strip()
+    app_secret = merged.get("tiktok_app_secret", "").strip()
+    if not app_id or not app_secret:
+        raise ConfigError("TikTok App ID / App Secret を設定してください。")
+    return OAuthAppConfig(
+        platform="tiktok",
+        client_id=app_id,
+        client_secret=app_secret,
+        authorization_url=TIKTOK_AUTH_URL,
+        token_url=TIKTOK_TOKEN_URL,
+        redirect_uri=oauth_redirect_uri(merged.get("app_base_url", ""), "tiktok"),
+        scopes=(),
+    )
+
+
+def build_tiktok_authorization_url(config: OAuthAppConfig, *, state: str) -> str:
+    params = {
+        "app_id": config.client_id,
+        "redirect_uri": config.redirect_uri,
+        "state": state,
+    }
+    return f"{config.authorization_url}?{urlencode(params)}"
+
+
+def exchange_tiktok_code(
+    config: OAuthAppConfig,
+    *,
+    auth_code: str,
+    session: Optional[requests.Session] = None,
+) -> OAuthTokenPayload:
+    http = session or requests.Session()
+    response = http.post(
+        config.token_url,
+        json={
+            "app_id": config.client_id,
+            "secret": config.client_secret,
+            "auth_code": auth_code,
+        },
+        timeout=30,
+    )
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise OAuthError("TikTok token exchange failed.") from exc
+    code = body.get("code", -1)
+    if code != 0:
+        message = body.get("message") or str(body)
+        raise OAuthError(f"TikTok token exchange error [{code}]: {message}")
+    data = body.get("data", {})
+    access_token = str(data.get("access_token") or "").strip()
+    if not access_token:
+        raise OAuthError("TikTok からアクセストークンを取得できませんでした。")
+    expires_in = data.get("expires_in") or data.get("access_token_expires_in")
+    return OAuthTokenPayload(
+        access_token=access_token,
+        refresh_token="",
+        token_expires_at=_expiry_from_seconds(expires_in),
+        raw_payload=data,
+    )
+
+
+def fetch_tiktok_profile(
+    token: OAuthTokenPayload,
+    *,
+    session: Optional[requests.Session] = None,
+) -> OAuthProfile:
+    http = session or requests.Session()
+    response = http.get(
+        TIKTOK_USERINFO_URL,
+        headers={"Access-Token": token.access_token},
+        timeout=30,
+    )
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise OAuthError("TikTok profile fetch failed.") from exc
+    code = body.get("code", -1)
+    if code != 0:
+        message = body.get("message") or str(body)
+        raise OAuthError(f"TikTok profile fetch error [{code}]: {message}")
+    data = body.get("data", {})
+    user_id = str(data.get("user_id") or "").strip()
+    username = str(data.get("username") or data.get("display_name") or user_id).strip()
+    email = str(data.get("email") or username).strip()
+    if not user_id:
+        raise OAuthError("TikTok ユーザー情報の取得に失敗しました。")
+    return OAuthProfile(
+        external_user_id=user_id,
+        profile_name=username,
+        profile_identifier=email,
+        metadata=data,
     )
 
 

@@ -25,16 +25,20 @@ from app.oauth_clients import (
     OAuthError,
     build_google_authorization_url,
     build_meta_authorization_url,
+    build_tiktok_authorization_url,
     create_oauth_state,
     exchange_google_code,
     exchange_meta_code,
+    exchange_tiktok_code,
     fetch_google_profile,
     fetch_meta_profile,
+    fetch_tiktok_profile,
     google_oauth_config,
     meta_oauth_config,
     metadata_json_for_oauth,
+    tiktok_oauth_config,
 )
-from app.sync_jobs import run_google_ads_monthly_sync_job, run_meta_monthly_sync_job
+from app.sync_jobs import run_google_ads_monthly_sync_job, run_meta_monthly_sync_job, run_tiktok_monthly_sync_job
 from app.admin_views import (
     render_accounts_page,
     render_credentials_page,
@@ -351,6 +355,18 @@ def start_credential_oauth_flow(form: dict):
         )
         return build_meta_authorization_url(config, state=state)
 
+    if platform == "tiktok":
+        config = tiktok_oauth_config(settings)
+        REPOSITORY.create_oauth_state(
+            state=state,
+            platform=platform,
+            auth_type=auth_type,
+            payload_json=json.dumps(payload, ensure_ascii=False),
+            code_verifier="",
+            expires_at=expires_at,
+        )
+        return build_tiktok_authorization_url(config, state=state)
+
     raise OAuthError("このプラットフォームでは OAuth 連携はまだ利用できません。")
 
 
@@ -382,6 +398,10 @@ def complete_credential_oauth(platform: str, *, state: str, code: str) -> str:
         config = meta_oauth_config(settings)
         token = exchange_meta_code(config, code=code)
         profile = fetch_meta_profile(config, token)
+    elif platform == "tiktok":
+        config = tiktok_oauth_config(settings)
+        token = exchange_tiktok_code(config, auth_code=code)
+        profile = fetch_tiktok_profile(token)
     else:
         raise OAuthError("未対応の OAuth プラットフォームです。")
 
@@ -767,7 +787,7 @@ def application(environ, start_response):
     if path == "/credentials/new" and method == "POST":
         form = parse_form(environ)
         auth_type = form.get("auth_type", "").strip() or "manual"
-        if auth_type == "oauth" and form.get("platform", "").strip() not in {"google", "meta"}:
+        if auth_type == "oauth" and form.get("platform", "").strip() not in {"google", "meta", "tiktok"}:
             return render_credentials_response(
                 start_response,
                 platform=form.get("platform", platform),
@@ -801,7 +821,7 @@ def application(environ, start_response):
                 },
             )
 
-        if auth_type == "oauth" and form["platform"].strip() in {"google", "meta"}:
+        if auth_type == "oauth" and form["platform"].strip() in {"google", "meta", "tiktok"}:
             try:
                 authorization_url = start_credential_oauth_flow(form)
             except Exception as exc:
@@ -933,6 +953,40 @@ def application(environ, start_response):
             "/credentials",
             platform="meta",
             notice=f"{result} の Meta 認証情報を更新しました。",
+        )
+
+    if path == "/oauth/tiktok/callback" and method == "GET":
+        oauth_error = query_param(environ, "error", "")
+        state = query_param(environ, "state", "")
+        auth_code = query_param(environ, "auth_code", "")
+        if oauth_error or not auth_code:
+            return redirect_to(
+                start_response,
+                "/credentials",
+                platform="tiktok",
+                error="TikTok OAuth がキャンセルされました。",
+            )
+        if not state:
+            return redirect_to(
+                start_response,
+                "/credentials",
+                platform="tiktok",
+                error="TikTok OAuth のコールバックに必要な情報が不足しています。",
+            )
+        try:
+            profile_name = complete_credential_oauth("tiktok", state=state, code=auth_code)
+        except Exception as exc:
+            return redirect_to(
+                start_response,
+                "/credentials",
+                platform="tiktok",
+                error=str(exc),
+            )
+        return redirect_to(
+            start_response,
+            "/credentials",
+            platform="tiktok",
+            notice=f"{profile_name} の TikTok 認証情報を追加しました。",
         )
 
     if path == "/credentials/reauth-all" and method == "POST":
@@ -1224,6 +1278,59 @@ def application(environ, start_response):
         report_date = query_param(environ, "report_date", "")
         try:
             job = run_google_ads_monthly_sync_job(
+                settings=settings,
+                repository=REPOSITORY,
+                project_root=PROJECT_ROOT,
+                report_date_input=report_date,
+                trigger_source="cron",
+            )
+        except Exception as exc:
+            return respond_json(
+                start_response,
+                {"ok": False, "error": str(exc)},
+                "500 Internal Server Error",
+            )
+
+        result = job.result
+        return respond_json(
+            start_response,
+            {
+                "ok": True,
+                "sync_run_id": job.sync_run_id,
+                "report_date": result.report_date,
+                "month_key": result.month_key,
+                "account_count": result.account_count,
+                "row_count": result.row_count,
+                "updated_count": result.updated_count,
+                "appended_count": result.appended_count,
+                "spreadsheet_url": result.spreadsheet_url,
+                "spreadsheet_title": result.spreadsheet_title,
+                "created_spreadsheet": result.created_spreadsheet,
+            },
+            "200 OK",
+        )
+
+    if path == "/jobs/tiktok/daily-sync" and method in {"GET", "POST"}:
+        settings = REPOSITORY.get_integration_settings()
+        configured_token = settings.get("job_trigger_token", "").strip()
+        supplied_token = (
+            environ.get("HTTP_X_FREDCORE_JOB_TOKEN", "").strip()
+            or query_param(environ, "token", "")
+        )
+        cron_secret = os.environ.get("CRON_SECRET", "").strip()
+        auth_header = environ.get("HTTP_AUTHORIZATION", "").strip()
+        token_allowed = bool(configured_token) and supplied_token == configured_token
+        cron_allowed = bool(cron_secret) and auth_header == f"Bearer {cron_secret}"
+        if (configured_token or cron_secret) and not (token_allowed or cron_allowed):
+            return respond_json(
+                start_response,
+                {"ok": False, "error": "invalid job token"},
+                "403 Forbidden",
+            )
+
+        report_date = query_param(environ, "report_date", "")
+        try:
+            job = run_tiktok_monthly_sync_job(
                 settings=settings,
                 repository=REPOSITORY,
                 project_root=PROJECT_ROOT,

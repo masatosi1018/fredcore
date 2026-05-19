@@ -17,6 +17,8 @@ INTEGRATION_DEFAULTS = {
     "google_oauth_client_id": "",
     "google_oauth_client_secret": "",
     "google_ads_developer_token": "",
+    "tiktok_app_id": "",
+    "tiktok_app_secret": "",
     "google_spreadsheet_id": "",
     "google_sheet_name": "Meta Daily Spend",
     "report_timezone": "Asia/Tokyo",
@@ -43,6 +45,8 @@ INTEGRATION_ENV_MAP = {
     "google_reports_folder_id": "GOOGLE_REPORTS_FOLDER_ID",
     "google_monthly_report_sheet_tab_name": "GOOGLE_MONTHLY_REPORT_SHEET_TAB_NAME",
     "google_ads_developer_token": "GOOGLE_ADS_DEVELOPER_TOKEN",
+    "tiktok_app_id": "TIKTOK_APP_ID",
+    "tiktok_app_secret": "TIKTOK_APP_SECRET",
 }
 
 

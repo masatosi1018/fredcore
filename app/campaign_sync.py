@@ -29,6 +29,8 @@ class MonthlyCampaignSyncConfig:
     google_oauth_client_id: str
     google_oauth_client_secret: str
     google_ads_developer_token: str
+    tiktok_app_id: str
+    tiktok_app_secret: str
     report_timezone: str
 
     @classmethod
@@ -71,6 +73,8 @@ class MonthlyCampaignSyncConfig:
             google_oauth_client_id=merged.get("google_oauth_client_id", "").strip(),
             google_oauth_client_secret=merged.get("google_oauth_client_secret", "").strip(),
             google_ads_developer_token=merged.get("google_ads_developer_token", "").strip(),
+            tiktok_app_id=merged.get("tiktok_app_id", "").strip(),
+            tiktok_app_secret=merged.get("tiktok_app_secret", "").strip(),
             report_timezone=merged.get("report_timezone", "").strip() or "Asia/Tokyo",
         )
 
@@ -378,6 +382,111 @@ def sync_google_ads_campaigns_to_monthly_sheet(
     else:
         sheets_client_class = sheets_client_factory
     sheets_client = sheets_client_class(
+        service_account_file=str(config.google_service_account_file),
+        spreadsheet_id=target_sheet.spreadsheet_id,
+        sheet_name=config.google_monthly_report_sheet_tab_name,
+        headers=MONTHLY_REPORT_HEADERS,
+        row_key_factory=campaign_row_key_from_values,
+    )
+    sheets_client.ensure_header()
+    updated_count, appended_count = sheets_client.upsert_rows(keyed_rows)
+    sheets_client.sort_rows()
+
+    return MonthlyCampaignSyncResult(
+        report_date=report_date,
+        month_key=month_key,
+        account_count=account_count,
+        row_count=len(keyed_rows),
+        updated_count=updated_count,
+        appended_count=appended_count,
+        spreadsheet_url=target_sheet.spreadsheet_url,
+        spreadsheet_title=target_sheet.spreadsheet_title,
+        created_spreadsheet=target_sheet.created_spreadsheet,
+    )
+
+
+def sync_tiktok_campaigns_to_monthly_sheet(
+    account_rows: Sequence[Mapping[str, str]],
+    *,
+    settings: Mapping[str, str],
+    project_root: Path,
+    report_date_input: Optional[str] = None,
+    tiktok_client_factory: Optional[Callable[..., object]] = None,
+    sheets_client_factory: Optional[Callable[..., object]] = None,
+    sheet_manager_factory: Optional[Callable[..., object]] = None,
+    repository=None,
+) -> MonthlyCampaignSyncResult:
+    if repository is None:
+        raise ConfigError("repository is required for monthly sheet sync.")
+
+    config = MonthlyCampaignSyncConfig.from_mapping(settings, project_root=project_root)
+    report_date = iso_date(parse_target_date(report_date_input, config.report_timezone))
+    month_key = report_date[:7]
+
+    target_sheet = _resolve_target_sheet(
+        repository,
+        month_key=month_key,
+        settings=settings,
+        project_root=project_root,
+        sheet_manager_factory=sheet_manager_factory,
+        config=config,
+    )
+
+    active_accounts = [
+        row
+        for row in account_rows
+        if str(row["platform"]).strip() == "tiktok" and int(row["sync_enabled"] or 1) == 1
+    ]
+    if not active_accounts:
+        raise ConfigError("TikTok アカウントが登録されていません。")
+
+    if tiktok_client_factory is None:
+        from app.tiktok_api import TikTokAdsClient
+        tiktok_client_class = TikTokAdsClient
+    else:
+        tiktok_client_class = tiktok_client_factory
+
+    keyed_rows = []
+    client_by_token: dict = {}
+    account_count = 0
+    for account_row in active_accounts:
+        advertiser_id = str(account_row["account_identifier"]).strip()
+        if not advertiser_id:
+            continue
+        access_token = _resolve_account_access_token(account_row, repository, "")
+        if not access_token:
+            account_name = str(account_row["account_name"] or advertiser_id)
+            raise ConfigError(
+                f"{account_name} の TikTok トークンがありません。認証プロフィールを再連携してください。"
+            )
+        if access_token not in client_by_token:
+            client_by_token[access_token] = tiktok_client_class(access_token=access_token)
+        records = client_by_token[access_token].fetch_account_daily_campaigns(
+            advertiser_id=advertiser_id,
+            report_date=report_date,
+        )
+        account_count += 1
+        for record in records:
+            if record.spend <= 0:
+                continue
+            keyed_rows.append(
+                (
+                    compose_campaign_row_key(
+                        record.report_date,
+                        record.platform,
+                        record.account_name,
+                        record.campaign_name,
+                    ),
+                    build_campaign_report_row(record),
+                )
+            )
+
+    if sheets_client_factory is None:
+        from app.sheets import GoogleSheetsTableClient
+        tiktok_sheets_class = GoogleSheetsTableClient
+    else:
+        tiktok_sheets_class = sheets_client_factory
+    sheets_client = tiktok_sheets_class(
         service_account_file=str(config.google_service_account_file),
         spreadsheet_id=target_sheet.spreadsheet_id,
         sheet_name=config.google_monthly_report_sheet_tab_name,

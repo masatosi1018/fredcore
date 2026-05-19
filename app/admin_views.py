@@ -2088,6 +2088,13 @@ def render_settings_page(values, *, notice: str = "", error: str = "") -> bytes:
           <input type="text" name="google_ads_developer_token" value="{escape(merged['google_ads_developer_token'])}">
         </label>
         <div class="settings-inline-note">Google Cloud Console で作成した OAuth クライアントID / シークレットと、Google Ads API の開発者トークンが必要です。</div>
+        <label>TikTok App ID
+          <input type="text" name="tiktok_app_id" value="{escape(merged['tiktok_app_id'])}">
+        </label>
+        <label>TikTok App Secret
+          <input type="text" name="tiktok_app_secret" value="{escape(merged['tiktok_app_secret'])}">
+        </label>
+        <div class="settings-inline-note">TikTok for Business Developer Portal で作成したアプリの App ID と App Secret です。</div>
         <label>Meta App ID
           <input type="text" name="meta_app_id" value="{escape(merged['meta_app_id'])}">
         </label>

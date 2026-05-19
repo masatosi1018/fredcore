@@ -8,6 +8,10 @@
     {
       "path": "/jobs/google/daily-sync",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/jobs/tiktok/daily-sync",
+      "schedule": "0 3 * * *"
     }
   ]
 }
