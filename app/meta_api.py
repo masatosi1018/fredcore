@@ -35,7 +35,7 @@ class MetaClient:
         insights = self._get(
             f"/act_{account_id}/insights",
             params={
-                "fields": "account_id,account_name,currency,spend,date_start,date_stop",
+                "fields": "account_id,account_name,spend,date_start,date_stop",
                 "time_range": json.dumps({"since": report_date, "until": report_date}),
                 "level": "account",
                 "limit": "1",
@@ -52,8 +52,7 @@ class MetaClient:
             account_id=str(insight_row.get("account_id") or account.get("id") or account_id),
             account_name=str(insight_row.get("account_name") or account.get("name") or ""),
             currency=str(
-                insight_row.get("currency")
-                or account.get("currency")
+                account.get("currency")
                 or ""
             ),
             spend=spend,
@@ -76,7 +75,7 @@ class MetaClient:
             f"/act_{account_id}/insights",
             params={
                 "fields": (
-                    "account_id,account_name,currency,"
+                    "account_id,account_name,"
                     "campaign_id,campaign_name,spend,impressions,clicks,actions,"
                     "date_start,date_stop"
                 ),
@@ -100,8 +99,7 @@ class MetaClient:
                     campaign_id=str(row.get("campaign_id") or ""),
                     campaign_name=str(row.get("campaign_name") or ""),
                     currency=str(
-                        row.get("currency")
-                        or account.get("currency")
+                        account.get("currency")
                         or ""
                     ),
                     spend=spend,
