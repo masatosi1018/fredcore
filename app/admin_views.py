@@ -117,7 +117,6 @@ NAV_ITEMS = [
     ("認証情報一覧", "/credentials", "key"),
     ("月別スプシ", "/report-sheets", "table"),
     ("同期履歴", "/sync-runs", "clock"),
-    ("設定", "/settings", "gear"),
 ]
 
 NAV_ICON_CLASSES = {
@@ -2056,68 +2055,6 @@ def render_placeholder_page(title: str, description: str, current_path: str) -> 
     </section>
     """
     return render_layout(title, body, current_path)
-
-
-def render_settings_page(values, *, notice: str = "", error: str = "") -> bytes:
-    merged = merged_integration_settings(values)
-    checked = (
-        " checked"
-        if merged["include_zero_spend_rows"].strip().lower() in {"1", "true", "yes", "on"}
-        else ""
-    )
-    body = f"""
-    <section class="page-head">
-      <div>
-        <h1>設定</h1>
-        <p>同期動作に必要な接続情報を保存します。OAuth アプリ認証情報（Meta App ID/Secret・Google OAuth クライアント・TikTok App ID/Secret・Google Ads デベロッパートークン）は Vercel 環境変数で設定してください。</p>
-      </div>
-    </section>
-    {render_feedback(notice, error)}
-    <section class="card form-card settings-card">
-      <form method="post" action="/settings">
-        <label>アプリのベースURL
-          <input type="text" name="app_base_url" value="{escape(merged['app_base_url'])}" placeholder="http://127.0.0.1:8000">
-        </label>
-        <label>Meta アクセストークン
-          <input type="text" name="meta_access_token" value="{escape(merged['meta_access_token'])}" placeholder="EAAB...">
-        </label>
-        <div class="settings-inline-note">Meta アクセストークンは、認証プロフィールにトークンが無い場合の fallback として使います。OAuth 連携用の App ID / Secret など各プラットフォームのアプリ認証情報は Vercel 環境変数で設定してください。</div>
-        <label>Meta Graph API バージョン
-          <input type="text" name="meta_graph_api_version" value="{escape(merged['meta_graph_api_version'])}">
-        </label>
-        <label>Google サービスアカウント JSON パス
-          <input type="text" name="google_service_account_file" value="{escape(merged['google_service_account_file'])}" required>
-        </label>
-        <label>Google スプレッドシートID
-          <input type="text" name="google_spreadsheet_id" value="{escape(merged['google_spreadsheet_id'])}">
-        </label>
-        <div class="settings-inline-note">固定の `Google スプレッドシートID` があれば、月別スプシが見つからない場合のフォールバックとして使われます。</div>
-        <label>Google 共有ドライブ配下のレポートフォルダID
-          <input type="text" name="google_reports_folder_id" value="{escape(merged['google_reports_folder_id'])}" placeholder="共有ドライブ内の保存先フォルダID or URL">
-        </label>
-        <label>月別スプシの初期タブ名
-          <input type="text" name="google_monthly_report_sheet_tab_name" value="{escape(merged['google_monthly_report_sheet_tab_name'])}">
-        </label>
-        <label>レポート基準タイムゾーン
-          <input type="text" name="report_timezone" value="{escape(merged['report_timezone'])}">
-        </label>
-        <label>Meta リクエストタイムアウト秒
-          <input type="text" name="meta_request_timeout_seconds" value="{escape(merged['meta_request_timeout_seconds'])}">
-        </label>
-        <label>ジョブ実行トークン
-          <input type="text" name="job_trigger_token" value="{escape(merged['job_trigger_token'])}" placeholder="Vercel Cron 用の共通トークン">
-        </label>
-        <label class="checkbox-label">
-          <input type="checkbox" name="include_zero_spend_rows" value="true"{checked}>
-          0円の日もシートへ出力する
-        </label>
-        <div class="form-actions">
-          <button class="primary-btn" type="submit">設定を保存</button>
-        </div>
-      </form>
-    </section>
-    """
-    return render_layout("設定", body, "/settings")
 
 
 def render_platform_options(active_platform: str) -> str:

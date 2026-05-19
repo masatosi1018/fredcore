@@ -17,10 +17,9 @@ from wsgiref.util import setup_testing_defaults
 
 from app.account_linking import find_discoverable_accounts, list_discoverable_accounts
 from app.admin_db import AdminRepository, DEFAULT_PLATFORM, SUPPORTED_PLATFORMS
-from app.config import ConfigError
+from app.config import ConfigError, get_config
 from app.dates import default_target_date
 from app.meta_api import MetaApiError, MetaClient
-from app.meta_sync import INTEGRATION_DEFAULTS
 from app.oauth_clients import (
     OAuthError,
     build_google_authorization_url,
@@ -43,7 +42,6 @@ from app.admin_views import (
     render_accounts_page,
     render_credentials_page,
     render_report_sheets_page,
-    render_settings_page,
     render_sync_runs_page,
 )
 
@@ -266,12 +264,9 @@ def render_accounts_response(
     status: str = "200 OK",
     modal_state: Optional[dict] = None,
 ):
-    integration_settings = REPOSITORY.get_integration_settings()
+    integration_settings = get_config()
     sync_date = report_date or default_target_date(
-        integration_settings.get(
-            "report_timezone",
-            INTEGRATION_DEFAULTS["report_timezone"],
-        )
+        integration_settings.get("report_timezone", "Asia/Tokyo")
     ).isoformat()
     body = render_accounts_page(
         REPOSITORY.list_accounts(platform, query),
@@ -312,7 +307,7 @@ def render_credentials_response(
 
 
 def start_credential_oauth_flow(form: dict):
-    settings = REPOSITORY.get_integration_settings()
+    settings = get_config()
     platform = form["platform"].strip()
     auth_type = form.get("auth_type", "oauth").strip() or "oauth"
     payload = {
@@ -384,7 +379,7 @@ def complete_credential_oauth(platform: str, *, state: str, code: str) -> str:
         if expires_at_dt is not None and expires_at_dt < datetime.now(timezone.utc):
             raise OAuthError("OAuth セッションの有効期限が切れました。もう一度やり直してください。")
 
-    settings = REPOSITORY.get_integration_settings()
+    settings = get_config()
     payload = json.loads(state_row["payload_json"])
     if platform == "google":
         config = google_oauth_config(settings)
@@ -480,7 +475,7 @@ def fetch_linkable_accounts(
     if not access_token:
         raise ConfigError("この認証プロフィールには Meta のアクセストークンが保存されていません。")
 
-    settings = REPOSITORY.get_integration_settings()
+    settings = get_config()
     graph_api_version = settings.get("meta_graph_api_version", "").strip() or "v22.0"
     timeout_seconds = int(settings.get("meta_request_timeout_seconds", "30").strip() or "30")
     client = MetaClient(
@@ -539,7 +534,7 @@ def application(environ, start_response):
                 "ok": True,
                 "database_backend": REPOSITORY.backend,
                 "app_base_url": (
-                    REPOSITORY.get_integration_settings().get("app_base_url", "").strip()
+                    get_config().get("app_base_url", "").strip()
                     or os.environ.get("FREDCORE_APP_BASE_URL", "").strip()
                 ),
             },
@@ -835,7 +830,7 @@ def application(environ, start_response):
 
         if auth_type == "system_user":
             from app.meta_api import MetaApiError, MetaClient
-            _settings = REPOSITORY.get_integration_settings()
+            _settings = get_config()
             token = form["access_token"].strip()
             try:
                 MetaClient(
@@ -1075,7 +1070,7 @@ def application(environ, start_response):
         form = parse_form(environ)
         try:
             job = run_meta_monthly_sync_job(
-                settings=REPOSITORY.get_integration_settings(),
+                settings=get_config(),
                 repository=REPOSITORY,
                 project_root=PROJECT_ROOT,
                 report_date_input=form.get("report_date", "").strip(),
@@ -1112,7 +1107,7 @@ def application(environ, start_response):
         form = parse_form(environ)
         try:
             job = run_meta_monthly_sync_job(
-                settings=REPOSITORY.get_integration_settings(),
+                settings=get_config(),
                 repository=REPOSITORY,
                 project_root=PROJECT_ROOT,
                 report_date_input=form.get("report_date", "").strip(),
@@ -1146,7 +1141,7 @@ def application(environ, start_response):
         )
 
     if path == "/jobs/meta/monthly-sync" and method in {"GET", "POST"}:
-        settings = REPOSITORY.get_integration_settings()
+        settings = get_config()
         configured_token = settings.get("job_trigger_token", "").strip()
         supplied_token = (
             environ.get("HTTP_X_FREDCORE_JOB_TOKEN", "").strip()
@@ -1198,7 +1193,7 @@ def application(environ, start_response):
         )
 
     if path == "/jobs/daily-sync" and method in {"GET", "POST"}:
-        settings = REPOSITORY.get_integration_settings()
+        settings = get_config()
         configured_token = settings.get("job_trigger_token", "").strip()
         supplied_token = (
             environ.get("HTTP_X_FREDCORE_JOB_TOKEN", "").strip()
@@ -1246,7 +1241,7 @@ def application(environ, start_response):
         return respond_json(start_response, {"ok": True, "results": results}, "200 OK")
 
     if path == "/jobs/meta/daily-sync" and method in {"GET", "POST"}:
-        settings = REPOSITORY.get_integration_settings()
+        settings = get_config()
         configured_token = settings.get("job_trigger_token", "").strip()
         supplied_token = (
             environ.get("HTTP_X_FREDCORE_JOB_TOKEN", "").strip()
@@ -1299,7 +1294,7 @@ def application(environ, start_response):
         )
 
     if path == "/jobs/google/daily-sync" and method in {"GET", "POST"}:
-        settings = REPOSITORY.get_integration_settings()
+        settings = get_config()
         configured_token = settings.get("job_trigger_token", "").strip()
         supplied_token = (
             environ.get("HTTP_X_FREDCORE_JOB_TOKEN", "").strip()
@@ -1352,7 +1347,7 @@ def application(environ, start_response):
         )
 
     if path == "/jobs/tiktok/daily-sync" and method in {"GET", "POST"}:
-        settings = REPOSITORY.get_integration_settings()
+        settings = get_config()
         configured_token = settings.get("job_trigger_token", "").strip()
         supplied_token = (
             environ.get("HTTP_X_FREDCORE_JOB_TOKEN", "").strip()
@@ -1403,33 +1398,6 @@ def application(environ, start_response):
             },
             "200 OK",
         )
-
-    if path == "/settings" and method == "GET":
-        body = render_settings_page(
-            REPOSITORY.get_integration_settings(),
-            notice=notice,
-            error=error,
-        )
-        return respond_html(start_response, body)
-
-    if path == "/settings" and method == "POST":
-        form = parse_form(environ)
-        _env_only_keys = {
-            "google_oauth_client_id", "google_oauth_client_secret",
-            "google_ads_developer_token",
-            "tiktok_app_id", "tiktok_app_secret",
-            "meta_app_id", "meta_app_secret",
-        }
-        values = {
-            key: form.get(key, "").strip()
-            for key in INTEGRATION_DEFAULTS
-            if key != "include_zero_spend_rows" and key not in _env_only_keys
-        }
-        values["include_zero_spend_rows"] = (
-            "true" if form.get("include_zero_spend_rows") else "false"
-        )
-        REPOSITORY.save_integration_settings(values)
-        return redirect_to(start_response, "/settings", notice="設定を保存しました。")
 
     return respond_html(start_response, b"Not Found", "404 Not Found")
 
