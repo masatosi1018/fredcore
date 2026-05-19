@@ -2091,10 +2091,7 @@ def render_settings_page(values, *, notice: str = "", error: str = "") -> bytes:
         <label>Google スプレッドシートID
           <input type="text" name="google_spreadsheet_id" value="{escape(merged['google_spreadsheet_id'])}">
         </label>
-        <label>Google シート名
-          <input type="text" name="google_sheet_name" value="{escape(merged['google_sheet_name'])}">
-        </label>
-        <div class="settings-inline-note">固定の `Google スプレッドシートID` があれば、`キャンペーン一覧` タブへの反映先として流用できます。`Google 共有ドライブ配下のレポートフォルダID` を入れると月次スプシを自動作成します。</div>
+        <div class="settings-inline-note">固定の `Google スプレッドシートID` があれば、月別スプシが見つからない場合のフォールバックとして使われます。</div>
         <label>Google 共有ドライブ配下のレポートフォルダID
           <input type="text" name="google_reports_folder_id" value="{escape(merged['google_reports_folder_id'])}" placeholder="共有ドライブ内の保存先フォルダID or URL">
         </label>
