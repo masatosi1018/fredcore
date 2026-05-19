@@ -179,20 +179,44 @@ class GoogleSheetsTableClient:
 
     def ensure_header(self) -> None:
         self.ensure_sheet_exists()
+        # Read wide enough to catch any extra columns left from old schema
         result = (
             self.service.spreadsheets()
             .values()
             .get(
                 spreadsheetId=self.spreadsheet_id,
-                range=f"{self.sheet_ref}!A1:{self.range_end}1",
+                range=f"{self.sheet_ref}!A1:ZZ1",
             )
             .execute()
         )
         existing = result.get("values", [])
         existing_width = len(existing[0]) if existing else 0
-        self.write_column_count = max(len(self.headers), existing_width)
-        self.range_end = _column_label(self.write_column_count)
-        if existing and existing[0] == self.headers:
+
+        # Delete extra columns beyond the expected count
+        if existing_width > len(self.headers) and self._sheet_id is not None:
+            (
+                self.service.spreadsheets()
+                .batchUpdate(
+                    spreadsheetId=self.spreadsheet_id,
+                    body={
+                        "requests": [
+                            {
+                                "deleteDimension": {
+                                    "range": {
+                                        "sheetId": self._sheet_id,
+                                        "dimension": "COLUMNS",
+                                        "startIndex": len(self.headers),
+                                        "endIndex": existing_width,
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                )
+                .execute()
+            )
+
+        if existing and existing[0][:len(self.headers)] == self.headers:
             return
 
         (
@@ -202,7 +226,7 @@ class GoogleSheetsTableClient:
                 spreadsheetId=self.spreadsheet_id,
                 range=f"{self.sheet_ref}!A1:{self.range_end}1",
                 valueInputOption="RAW",
-                body={"values": [self._pad_row(self.headers)]},
+                body={"values": [self.headers]},
             )
             .execute()
         )
