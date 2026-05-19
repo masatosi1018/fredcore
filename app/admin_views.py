@@ -743,7 +743,7 @@ def render_credential_modal_script() -> str:
       const profileIdentifierInput = modal.querySelector('[data-credential-profile-identifier]');
       let isOpen = modal.dataset.open === 'true';
       let currentStep = Number(modal.dataset.step || '1');
-      let selectedPlatform = modal.dataset.platform || 'google';
+      let selectedPlatform = modal.dataset.platform || 'meta';
       let selectedAuthType = modal.dataset.authType || 'oauth';
 
       const authTypeLabels = {
@@ -910,7 +910,7 @@ def render_account_link_modal_script() -> str:
       let metaRequestKey = '';
       let isOpen = modal.dataset.open === 'true';
       let currentStep = Number(modal.dataset.step || '1');
-      let selectedPlatform = modal.dataset.platform || 'google';
+      let selectedPlatform = modal.dataset.platform || 'meta';
 
       accountPanels.forEach((panel) => {
         selectedAccountIdsByPlatform[panel.dataset.accountPanel] = [...panel.querySelectorAll('input[type="checkbox"]:checked')].map((checkbox) => checkbox.value);
