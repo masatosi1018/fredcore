@@ -130,7 +130,43 @@ class GoogleSheetsTableClient:
         self.row_key_factory = row_key_factory
         self.range_end = _column_label(len(self.headers))
 
+    def ensure_sheet_exists(self) -> None:
+        spreadsheet = (
+            self.service.spreadsheets()
+            .get(
+                spreadsheetId=self.spreadsheet_id,
+                fields="sheets.properties.title",
+            )
+            .execute()
+        )
+        existing_titles = {
+            str(sheet.get("properties", {}).get("title") or "").strip()
+            for sheet in spreadsheet.get("sheets", [])
+        }
+        if self.sheet_name in existing_titles:
+            return
+
+        (
+            self.service.spreadsheets()
+            .batchUpdate(
+                spreadsheetId=self.spreadsheet_id,
+                body={
+                    "requests": [
+                        {
+                            "addSheet": {
+                                "properties": {
+                                    "title": self.sheet_name,
+                                }
+                            }
+                        }
+                    ]
+                },
+            )
+            .execute()
+        )
+
     def ensure_header(self) -> None:
+        self.ensure_sheet_exists()
         result = (
             self.service.spreadsheets()
             .values()
