@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import time
+import traceback
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Iterable, Optional
@@ -448,7 +449,6 @@ def fetch_linkable_accounts(
 
 
 def application(environ, start_response):
-    ensure_repository_ready()
     setup_testing_defaults(environ)
     path = environ.get("PATH_INFO", "/")
     method = environ.get("REQUEST_METHOD", "GET").upper()
@@ -456,6 +456,26 @@ def application(environ, start_response):
     query = query_param(environ, "q", "")
     notice = query_param(environ, "notice", "")
     error = query_param(environ, "error", "")
+
+    try:
+        ensure_repository_ready()
+    except Exception as exc:
+        traceback.print_exc()
+        if path == "/api/health" and method == "GET":
+            return respond_json(
+                start_response,
+                {
+                    "ok": False,
+                    "database_backend": REPOSITORY.backend,
+                    "error": str(exc),
+                },
+                "500 Internal Server Error",
+            )
+        return respond_html(
+            start_response,
+            f"Internal Server Error: {exc}".encode("utf-8"),
+            "500 Internal Server Error",
+        )
 
     if path.startswith("/static/"):
         return serve_static(path, start_response)

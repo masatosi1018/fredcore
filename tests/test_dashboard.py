@@ -14,6 +14,7 @@ class DashboardTest(unittest.TestCase):
         self.repository.initialize()
         self.repository.seed_if_empty()
         self.original_repository = dashboard.REPOSITORY
+        self.original_ensure_repository_ready = dashboard.ensure_repository_ready
         self.original_start_credential_oauth_flow = dashboard.start_credential_oauth_flow
         self.original_complete_credential_oauth = dashboard.complete_credential_oauth
         self.original_fetch_linkable_accounts = dashboard.fetch_linkable_accounts
@@ -21,6 +22,7 @@ class DashboardTest(unittest.TestCase):
 
     def tearDown(self):
         dashboard.REPOSITORY = self.original_repository
+        dashboard.ensure_repository_ready = self.original_ensure_repository_ready
         dashboard.start_credential_oauth_flow = self.original_start_credential_oauth_flow
         dashboard.complete_credential_oauth = self.original_complete_credential_oauth
         dashboard.fetch_linkable_accounts = self.original_fetch_linkable_accounts
@@ -129,6 +131,14 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual(response["status"], "200 OK")
         self.assertIn('"ok": true', response["body"])
         self.assertIn('"database_backend": "sqlite"', response["body"])
+
+    def test_health_endpoint_surfaces_repository_initialization_errors(self):
+        dashboard.ensure_repository_ready = lambda: (_ for _ in ()).throw(RuntimeError("db init failed"))
+        response = self.request("/api/health")
+        self.assertEqual(response["status"], "500 Internal Server Error")
+        self.assertIn('"ok": false', response["body"])
+        self.assertIn('"database_backend": "sqlite"', response["body"])
+        self.assertIn("db init failed", response["body"])
 
     def test_post_credential_create_saves_auth_type(self):
         response = self.request(
