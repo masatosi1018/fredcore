@@ -85,7 +85,7 @@ def ensure_repository_ready() -> None:
     if _REPOSITORY_READY:
         return
     REPOSITORY.initialize()
-    REPOSITORY.seed_if_empty()
+    REPOSITORY.cleanup_legacy_demo_data()
     _REPOSITORY_READY = True
 
 

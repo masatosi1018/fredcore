@@ -12,7 +12,23 @@ class DashboardTest(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.repository = AdminRepository(Path(self.temp_dir.name) / "fredcore.db")
         self.repository.initialize()
-        self.repository.seed_if_empty()
+        self.repository.create_credential(
+            platform="google",
+            profile_name="Google OAuth User",
+            profile_identifier="google@example.com",
+            creator_email="test@example.com",
+            auth_expiry="",
+            auth_type="oauth",
+        )
+        self.repository.create_credential(
+            platform="meta",
+            profile_name="Meta OAuth User",
+            profile_identifier="meta@example.com",
+            creator_email="test@example.com",
+            auth_expiry="",
+            auth_type="oauth",
+            access_token="meta-token-1",
+        )
         self.original_repository = dashboard.REPOSITORY
         self.original_ensure_repository_ready = dashboard.ensure_repository_ready
         self.original_start_credential_oauth_flow = dashboard.start_credential_oauth_flow

@@ -17,6 +17,34 @@ except ImportError:  # pragma: no cover - optional in sqlite-only environments
 
 SUPPORTED_PLATFORMS = ("meta", "google", "tiktok")
 DEFAULT_PLATFORM = "google"
+LEGACY_DEMO_CREDENTIAL_IDENTIFIERS = (
+    "ryo.cip.fred@gmail.com",
+    "dymfred003@gmail.com",
+    "optadfred001@gmail.com",
+    "optfred001@gmail.com",
+    "pmo001.fred.2026@gmail.com",
+    "yusuke.chiba2@fred-japan.co.jp",
+    "agency-growth@fred.jp",
+)
+LEGACY_DEMO_ACCOUNT_IDENTIFIERS = (
+    "4696494872",
+    "1060984764",
+    "6659927996",
+    "6276773654",
+    "5049084174",
+    "1519429160",
+    "1481105593",
+    "1915293717",
+    "9337704507",
+    "act_120011223344",
+    "act_120011223355",
+    "tt-77889911",
+)
+LEGACY_DEMO_RULE_NAMES = (
+    "CPA 悪化時に Slack 通知",
+    "消化率 110% 超で入札調整",
+    "CTR 低下時に確認依頼",
+)
 
 
 def utc_now() -> str:
@@ -307,128 +335,42 @@ class AdminRepository:
             f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}"
         )
 
-    def seed_if_empty(self) -> None:
+    def cleanup_legacy_demo_data(self) -> None:
         with self.connect() as connection:
-            exists = connection.execute(
-                "SELECT COUNT(*) AS count FROM credential_profiles"
-            ).fetchone()["count"]
-            if exists:
-                return
-
-            now = utc_now()
-            credentials = [
-                ("meta", "ながもと", "ryo.cip.fred@gmail.com", "正常", None, "daiki.sakai@fred-japan.co.jp", "2026-03-12 13:30", "2026-03-13 10:51"),
-                ("google", "DYMFRED003", "dymfred003@gmail.com", "正常", None, "daiki.sakai@fred-japan.co.jp", "2026-04-01 16:40", "2026-04-06 19:23"),
-                ("google", "OPT FRED", "optadfred001@gmail.com", "正常", None, "daiki.sakai@fred-japan.co.jp", "2026-03-10 15:49", "2026-03-10 15:49"),
-                ("google", "OPT貸001", "optfred001@gmail.com", "正常", None, "daiki.sakai@fred-japan.co.jp", "2026-04-01 17:42", "2026-04-01 17:42"),
-                ("google", "pmo001", "pmo001.fred.2026@gmail.com", "正常", None, "daiki.sakai@fred-japan.co.jp", "2026-03-15 10:07", "2026-03-15 10:07"),
-                ("google", "yusuke2 chiba", "yusuke.chiba2@fred-japan.co.jp", "正常", None, "daiki.sakai@fred-japan.co.jp", "2026-03-27 18:31", "2026-04-06 19:15"),
-                ("tiktok", "TikTok Main", "agency-growth@fred.jp", "正常", None, "daiki.sakai@fred-japan.co.jp", "2026-04-05 09:12", "2026-04-05 09:12"),
-            ]
-            connection.executemany(
-                """
-                INSERT INTO credential_profiles (
-                    platform, profile_name, profile_identifier, status, auth_expiry,
-                    auth_type, metadata_json, creator_email, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    (*row[:5], "manual", "{}", *row[5:])
-                    for row in credentials
-                ],
+            self._delete_rows_by_values(
+                connection,
+                "automation_rules",
+                "rule_name",
+                LEGACY_DEMO_RULE_NAMES,
+            )
+            self._delete_rows_by_values(
+                connection,
+                "linked_accounts",
+                "account_identifier",
+                LEGACY_DEMO_ACCOUNT_IDENTIFIERS,
+            )
+            self._delete_rows_by_values(
+                connection,
+                "credential_profiles",
+                "profile_identifier",
+                LEGACY_DEMO_CREDENTIAL_IDENTIFIERS,
             )
 
-            profile_lookup = {
-                row["profile_name"]: row["id"]
-                for row in connection.execute(
-                    "SELECT id, profile_name FROM credential_profiles"
-                ).fetchall()
-            }
-            accounts = [
-                ("google", "株式会社物販ONE08/fred", "4696494872", "Asia/Tokyo", profile_lookup["DYMFRED003"], "daiki.sakai@fred-japan.co.jp", "-", now, now),
-                ("google", "アズール株式会社09/fred", "1060984764", "Asia/Tokyo", profile_lookup["DYMFRED003"], "daiki.sakai@fred-japan.co.jp", "-", now, now),
-                ("google", "株式会社ミライラボラトリー05/fred", "6659927996", "Asia/Tokyo", profile_lookup["DYMFRED003"], "daiki.sakai@fred-japan.co.jp", "-", now, now),
-                ("google", "株式会社LADDER03/fred", "6276773654", "Asia/Tokyo", profile_lookup["DYMFRED003"], "daiki.sakai@fred-japan.co.jp", "-", now, now),
-                ("google", "アドネス株式会社08/fred", "5049084174", "Asia/Tokyo", profile_lookup["DYMFRED003"], "daiki.sakai@fred-japan.co.jp", "-", now, now),
-                ("google", "アズール株式会社08/fred", "1519429160", "Asia/Tokyo", profile_lookup["DYMFRED003"], "daiki.sakai@fred-japan.co.jp", "-", now, now),
-                ("google", "株式会社ミライラボラトリー06/fred", "1481105593", "Asia/Tokyo", profile_lookup["DYMFRED003"], "daiki.sakai@fred-japan.co.jp", "-", now, now),
-                ("google", "株式会社物販ONE09/fred", "1915293717", "Asia/Tokyo", profile_lookup["DYMFRED003"], "daiki.sakai@fred-japan.co.jp", "-", now, now),
-                ("google", "株式会社TOEZ12/fred", "9337704507", "Asia/Tokyo", profile_lookup["DYMFRED003"], "daiki.sakai@fred-japan.co.jp", "-", now, now),
-                ("meta", "fred_meta_main", "act_120011223344", "Asia/Tokyo", profile_lookup["ながもと"], "daiki.sakai@fred-japan.co.jp", "Fred Holdings", now, now),
-                ("meta", "fred_meta_sub", "act_120011223355", "Asia/Tokyo", profile_lookup["ながもと"], "daiki.sakai@fred-japan.co.jp", "Fred Holdings", now, now),
-                ("tiktok", "fred_tiktok_growth", "tt-77889911", "Asia/Tokyo", profile_lookup["TikTok Main"], "daiki.sakai@fred-japan.co.jp", "-", now, now),
-            ]
-            connection.executemany(
-                """
-                INSERT INTO linked_accounts (
-                    platform, account_name, account_identifier, timezone_name,
-                    credential_profile_id, operator_email, parent_account,
-                    selection_source, sync_enabled, sync_status, last_synced_at,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    (*row[:7], "manual", 1, "未同期", None, *row[7:])
-                    for row in accounts
-                ],
-            )
-            rules = [
-                (
-                    "meta",
-                    "CPA 悪化時に Slack 通知",
-                    "fred_meta_main",
-                    "CPA",
-                    ">=",
-                    "8000",
-                    "通知",
-                    "Slack #ad-alerts",
-                    "有効",
-                    "daiki.sakai@fred-japan.co.jp",
-                    "前日比で大きく悪化した時に担当者へ通知",
-                    now,
-                    now,
-                ),
-                (
-                    "google",
-                    "消化率 110% 超で入札調整",
-                    "株式会社物販ONE08/fred",
-                    "消化率",
-                    ">=",
-                    "110",
-                    "入札調整",
-                    "-15%",
-                    "有効",
-                    "daiki.sakai@fred-japan.co.jp",
-                    "日予算を超えそうな時に抑制する想定",
-                    now,
-                    now,
-                ),
-                (
-                    "tiktok",
-                    "CTR 低下時に確認依頼",
-                    "fred_tiktok_growth",
-                    "CTR",
-                    "<=",
-                    "0.8",
-                    "通知",
-                    "運用担当へメール",
-                    "停止中",
-                    "daiki.sakai@fred-japan.co.jp",
-                    "クリエイティブ差し替え判断用のたたき台",
-                    now,
-                    now,
-                ),
-            ]
-            connection.executemany(
-                """
-                INSERT INTO automation_rules (
-                    platform, rule_name, target_label, metric_name,
-                    condition_operator, threshold_value, action_type, action_value,
-                    status, owner_email, notes, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                rules,
-            )
+    def _delete_rows_by_values(
+        self,
+        connection: Any,
+        table_name: str,
+        column_name: str,
+        values: Iterable[str],
+    ) -> None:
+        normalized_values = [value for value in values if value]
+        if not normalized_values:
+            return
+        placeholders = ", ".join("?" for _ in normalized_values)
+        connection.execute(
+            f"DELETE FROM {table_name} WHERE {column_name} IN ({placeholders})",
+            tuple(normalized_values),
+        )
 
     def _platform_clause(
         self,

@@ -11,16 +11,46 @@ class AdminRepositoryTest(unittest.TestCase):
         self.database_path = Path(self.temp_dir.name) / "adasi.db"
         self.repository = AdminRepository(self.database_path)
         self.repository.initialize()
-        self.repository.seed_if_empty()
+        self.repository.create_credential(
+            platform="google",
+            profile_name="Google Main",
+            profile_identifier="google-main@example.com",
+            creator_email="test@example.com",
+            auth_expiry="",
+        )
+        self.repository.create_credential(
+            platform="meta",
+            profile_name="Meta Main",
+            profile_identifier="meta-main@example.com",
+            creator_email="test@example.com",
+            auth_expiry="",
+        )
+        self.repository.create_credential(
+            platform="tiktok",
+            profile_name="TikTok Main",
+            profile_identifier="tiktok-main@example.com",
+            creator_email="test@example.com",
+            auth_expiry="",
+        )
+        meta_credential_id = self.repository.credential_choices("meta")[0]["id"]
+        self.repository.create_account(
+            platform="meta",
+            account_name="Meta Main",
+            account_identifier="act_123",
+            timezone_name="Asia/Tokyo",
+            credential_profile_id=meta_credential_id,
+            operator_email="test@example.com",
+            parent_account="-",
+        )
 
     def tearDown(self):
         self.temp_dir.cleanup()
 
-    def test_seed_creates_platform_counts(self):
+    def test_counts_reflect_created_credentials(self):
         counts = self.repository.get_platform_counts("credential_profiles")
-        self.assertGreaterEqual(counts["google"], 1)
-        self.assertGreaterEqual(counts["meta"], 1)
-        self.assertGreaterEqual(counts["tiktok"], 1)
+        self.assertEqual(counts["google"], 1)
+        self.assertEqual(counts["meta"], 1)
+        self.assertEqual(counts["tiktok"], 1)
 
     def test_create_account_is_listed(self):
         credential_id = self.repository.credential_choices("google")[0]["id"]
@@ -124,6 +154,49 @@ class AdminRepositoryTest(unittest.TestCase):
         row = self.repository.list_accounts("meta")[0]
         self.assertEqual(row["sync_status"], "同期済み")
         self.assertEqual(row["last_synced_report_date"], "2026-05-11")
+
+    def test_cleanup_legacy_demo_data_removes_known_dummy_rows(self):
+        self.repository.create_credential(
+            platform="meta",
+            profile_name="ながもと",
+            profile_identifier="ryo.cip.fred@gmail.com",
+            creator_email="demo@example.com",
+            auth_expiry="",
+        )
+        legacy_credential_id = self.repository.list_credentials("meta", "ながもと")[0]["id"]
+        self.repository.create_account(
+            platform="meta",
+            account_name="fred_meta_main",
+            account_identifier="act_120011223344",
+            timezone_name="Asia/Tokyo",
+            credential_profile_id=legacy_credential_id,
+            operator_email="demo@example.com",
+            parent_account="Fred Holdings",
+        )
+        self.repository.create_rule(
+            platform="meta",
+            rule_name="CPA 悪化時に Slack 通知",
+            target_label="fred_meta_main",
+            metric_name="CPA",
+            condition_operator=">=",
+            threshold_value="8000",
+            action_type="通知",
+            action_value="Slack #ad-alerts",
+            status="有効",
+            owner_email="demo@example.com",
+        )
+
+        self.repository.cleanup_legacy_demo_data()
+
+        self.assertEqual(self.repository.list_credentials("meta", "ながもと"), [])
+        self.assertEqual(
+            [row for row in self.repository.list_accounts("meta") if row["account_identifier"] == "act_120011223344"],
+            [],
+        )
+        self.assertEqual(
+            [row for row in self.repository.list_rules("meta", "CPA 悪化時に Slack 通知")],
+            [],
+        )
 
     def test_create_and_consume_oauth_state(self):
         self.repository.create_oauth_state(
