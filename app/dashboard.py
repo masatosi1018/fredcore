@@ -387,11 +387,11 @@ def complete_credential_oauth(platform: str, *, state: str, code: str) -> str:
 
     profile_name = str(payload.get("profile_name") or profile.profile_name).strip()
     profile_identifier = str(payload.get("profile_identifier") or profile.profile_identifier).strip()
-    creator_email = str(payload.get("creator_email") or "").strip()
+    creator_email = (
+        str(payload.get("creator_email") or "").strip()
+        or profile.profile_identifier
+    )
     auth_expiry = token.token_expires_at or str(payload.get("auth_expiry") or "").strip()
-
-    if not creator_email:
-        raise OAuthError("作成者メールが未指定です。")
 
     REPOSITORY.create_credential(
         platform=platform,
@@ -757,9 +757,9 @@ def application(environ, start_response):
                     "error": "このプラットフォームの OAuth 連携はまだ未対応です。",
                 },
             )
-        required = ["platform", "creator_email", "auth_type"]
+        required = ["platform", "auth_type"]
         if auth_type != "oauth":
-            required.extend(["profile_name", "profile_identifier"])
+            required.extend(["profile_name", "profile_identifier", "creator_email"])
         if auth_type == "system_user":
             required.append("access_token")
         if not all(form.get(field, "").strip() for field in required):

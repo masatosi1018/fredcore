@@ -58,18 +58,9 @@ CREDENTIAL_AUTH_FLOW = {
             {
                 "value": "oauth",
                 "label": "Meta OAuth",
-                "description": "Facebook ログイン経由で広告アカウントに接続する想定です。",
+                "description": "Facebook ログイン経由で広告アカウントに接続します。",
                 "notes": (
-                    "今後の Meta 認証導線をそのまま載せ替えやすい方式です。",
                     "ビジネスマネージャー運用の担当者単位で管理できます。",
-                ),
-            },
-            {
-                "value": "system_user",
-                "label": "Business Manager System User",
-                "description": "システムユーザーのトークン運用を想定した保存方式です。",
-                "notes": (
-                    "自動化用の Meta 認証を分けて管理したい時に向いています。",
                 ),
             },
         ),
@@ -259,6 +250,15 @@ def render_accounts_toolbar(active_platform: str, query: str) -> str:
 
 
 def render_credentials_toolbar(active_platform: str, query: str) -> str:
+    if active_platform == "meta":
+        add_button = """
+        <form method="post" action="/credentials/new">
+          <input type="hidden" name="platform" value="meta">
+          <input type="hidden" name="auth_type" value="oauth">
+          <button class="primary-btn" type="submit">Meta OAuth で認証</button>
+        </form>"""
+    else:
+        add_button = '<button class="primary-btn" type="button" data-open-credential-modal>新しい認証情報を追加</button>'
     return f"""
     <div class="toolbar">
       <form class="search-form" method="get" action="/credentials">
@@ -270,7 +270,7 @@ def render_credentials_toolbar(active_platform: str, query: str) -> str:
         <button class="secondary-btn" type="submit">フィルター</button>
       </form>
       <div class="toolbar-actions">
-        <button class="primary-btn" type="button" data-open-credential-modal>新しい認証情報を追加</button>
+        {add_button}
       </div>
     </div>
     """
