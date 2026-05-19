@@ -1069,6 +1069,19 @@ def application(environ, start_response):
             notice="認証情報を削除しました。",
         )
 
+    if path == "/accounts/delete-bulk" and method == "POST":
+        form = parse_form(environ)
+        ids = [int(x) for x in form.get("account_ids", "").split(",") if x.strip().isdigit()]
+        for aid in ids:
+            REPOSITORY.delete_account(aid)
+        return redirect_to(
+            start_response,
+            "/accounts",
+            platform=form.get("platform", platform),
+            q=form.get("q", query),
+            notice=f"{len(ids)} 件のアカウントの連携を解除しました。",
+        )
+
     if path.startswith("/accounts/") and path.endswith("/delete") and method == "POST":
         account_id = int(path.split("/")[2])
         REPOSITORY.delete_account(account_id)

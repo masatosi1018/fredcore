@@ -274,10 +274,51 @@ def render_accounts_toolbar(active_platform: str, query: str) -> str:
         <button class="secondary-btn" type="submit">フィルター</button>
       </form>
       <div class="toolbar-actions">
-        <div class="ghost-chip">連携解除</div>
+        <button type="button" class="secondary-btn" id="accounts-select-all">全選択</button>
+        <form method="post" action="/accounts/delete-bulk" id="accounts-bulk-form" style="display:inline">
+          <input type="hidden" name="platform" value="{escape(active_platform)}">
+          <input type="hidden" name="q" value="{escape(query)}">
+          <input type="hidden" name="account_ids" id="accounts-bulk-ids" value="">
+          <button type="submit" class="secondary-btn" id="accounts-delink-btn" disabled>連携解除</button>
+        </form>
         <button class="primary-btn" type="button" data-open-account-link-modal>新しいアカウントを連携</button>
       </div>
     </div>
+    <script>
+    (() => {{
+      const selectAllBtn = document.getElementById('accounts-select-all');
+      const delinkBtn = document.getElementById('accounts-delink-btn');
+      const bulkIdsInput = document.getElementById('accounts-bulk-ids');
+      const bulkForm = document.getElementById('accounts-bulk-form');
+      if (!selectAllBtn) return;
+
+      function getBoxes() {{
+        return [...document.querySelectorAll('.account-row-check')];
+      }}
+      function updateState() {{
+        const boxes = getBoxes();
+        const checked = boxes.filter(b => b.checked);
+        delinkBtn.disabled = checked.length === 0;
+        bulkIdsInput.value = checked.map(b => b.value).join(',');
+        const allChecked = boxes.length > 0 && checked.length === boxes.length;
+        selectAllBtn.textContent = allChecked ? '選択解除' : '全選択';
+      }}
+      selectAllBtn.addEventListener('click', () => {{
+        const boxes = getBoxes();
+        const allChecked = boxes.every(b => b.checked);
+        boxes.forEach(b => {{ b.checked = !allChecked; }});
+        updateState();
+      }});
+      document.addEventListener('change', e => {{
+        if (e.target.classList.contains('account-row-check')) updateState();
+      }});
+      bulkForm.addEventListener('submit', e => {{
+        const count = bulkIdsInput.value.split(',').filter(Boolean).length;
+        if (!count) {{ e.preventDefault(); return; }}
+        if (!confirm(count + ' 件のアカウントの連携を解除しますか？')) e.preventDefault();
+      }});
+    }})();
+    </script>
     """
 
 
@@ -1657,12 +1698,10 @@ def render_accounts_page(
         table_rows.append(
             f"""
             <tr>
-              <td class="checkbox-cell"><input type="checkbox" disabled></td>
+              <td class="checkbox-cell"><input type="checkbox" class="account-row-check" value="{row["id"]}"></td>
               <td><span class="platform-mark">{PLATFORM_ICONS[row["platform"]]}</span>{escape(row["account_name"])}</td>
-              <td>{escape(row["account_identifier"])}</td>
-              <td>{escape(row["timezone_name"])}</td>
               <td><span class="badge green">{escape(row["credential_profile_name"] or "-")}</span></td>
-              <td><span class="pill">{escape(row["operator_email"])}</span></td>
+              <td style="white-space:nowrap">{escape(row["operator_email"])}</td>
               <td>{escape(row["parent_account"])}</td>
               <td class="action-cell">
                 <form method="post" action="/accounts/{row["id"]}/delete?platform={escape(active_platform)}&q={escape(query)}">
@@ -1695,8 +1734,6 @@ def render_accounts_page(
             <tr>
               <th class="checkbox-cell"></th>
               <th>アカウント名</th>
-              <th>アカウントID</th>
-              <th>タイムゾーン</th>
               <th>認証プロフィール</th>
               <th>操作担当者</th>
               <th>親アカウント</th>
@@ -1704,7 +1741,7 @@ def render_accounts_page(
             </tr>
           </thead>
           <tbody>
-            {''.join(table_rows) if table_rows else '<tr><td colspan="8" class="empty">該当するアカウントがありません。</td></tr>'}
+            {''.join(table_rows) if table_rows else '<tr><td colspan="6" class="empty">該当するアカウントがありません。</td></tr>'}
           </tbody>
         </table>
       </div>
