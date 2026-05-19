@@ -1414,10 +1414,16 @@ def application(environ, start_response):
 
     if path == "/settings" and method == "POST":
         form = parse_form(environ)
+        _env_only_keys = {
+            "google_oauth_client_id", "google_oauth_client_secret",
+            "google_ads_developer_token",
+            "tiktok_app_id", "tiktok_app_secret",
+            "meta_app_id", "meta_app_secret",
+        }
         values = {
             key: form.get(key, "").strip()
             for key in INTEGRATION_DEFAULTS
-            if key != "include_zero_spend_rows"
+            if key != "include_zero_spend_rows" and key not in _env_only_keys
         }
         values["include_zero_spend_rows"] = (
             "true" if form.get("include_zero_spend_rows") else "false"

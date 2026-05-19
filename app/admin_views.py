@@ -2069,7 +2069,7 @@ def render_settings_page(values, *, notice: str = "", error: str = "") -> bytes:
     <section class="page-head">
       <div>
         <h1>設定</h1>
-        <p>Meta API と Google スプレッドシート転記に必要な接続情報を保存します。Meta の OAuth 連携には、Meta for Developers で作成した FREDCore 用アプリの情報が必要です。</p>
+        <p>同期動作に必要な接続情報を保存します。OAuth アプリ認証情報（Meta App ID/Secret・Google OAuth クライアント・TikTok App ID/Secret・Google Ads デベロッパートークン）は Vercel 環境変数で設定してください。</p>
       </div>
     </section>
     {render_feedback(notice, error)}
@@ -2078,33 +2078,10 @@ def render_settings_page(values, *, notice: str = "", error: str = "") -> bytes:
         <label>アプリのベースURL
           <input type="text" name="app_base_url" value="{escape(merged['app_base_url'])}" placeholder="http://127.0.0.1:8000">
         </label>
-        <label>Google OAuth クライアントID
-          <input type="text" name="google_oauth_client_id" value="{escape(merged['google_oauth_client_id'])}">
-        </label>
-        <label>Google OAuth クライアントシークレット
-          <input type="text" name="google_oauth_client_secret" value="{escape(merged['google_oauth_client_secret'])}">
-        </label>
-        <label>Google Ads デベロッパートークン
-          <input type="text" name="google_ads_developer_token" value="{escape(merged['google_ads_developer_token'])}">
-        </label>
-        <div class="settings-inline-note">Google Cloud Console で作成した OAuth クライアントID / シークレットと、Google Ads API の開発者トークンが必要です。</div>
-        <label>TikTok App ID
-          <input type="text" name="tiktok_app_id" value="{escape(merged['tiktok_app_id'])}">
-        </label>
-        <label>TikTok App Secret
-          <input type="text" name="tiktok_app_secret" value="{escape(merged['tiktok_app_secret'])}">
-        </label>
-        <div class="settings-inline-note">TikTok for Business Developer Portal で作成したアプリの App ID と App Secret です。</div>
-        <label>Meta App ID
-          <input type="text" name="meta_app_id" value="{escape(merged['meta_app_id'])}">
-        </label>
-        <label>Meta App Secret
-          <input type="text" name="meta_app_secret" value="{escape(merged['meta_app_secret'])}">
-        </label>
         <label>Meta アクセストークン
           <input type="text" name="meta_access_token" value="{escape(merged['meta_access_token'])}" placeholder="EAAB...">
         </label>
-        <div class="settings-inline-note">`Meta App ID / Secret` は認証プロフィールの OAuth 連携に使います。`Meta アクセストークン` は、認証プロフィールにトークンが無い場合の fallback として使います。</div>
+        <div class="settings-inline-note">Meta アクセストークンは、認証プロフィールにトークンが無い場合の fallback として使います。OAuth 連携用の App ID / Secret など各プラットフォームのアプリ認証情報は Vercel 環境変数で設定してください。</div>
         <label>Meta Graph API バージョン
           <input type="text" name="meta_graph_api_version" value="{escape(merged['meta_graph_api_version'])}">
         </label>
