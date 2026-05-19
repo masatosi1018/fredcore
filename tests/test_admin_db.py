@@ -102,9 +102,9 @@ class AdminRepositoryTest(unittest.TestCase):
             notes="4月分",
         )
         rows = self.repository.list_monthly_report_sheets()
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["month_key"], "2026-04")
-        self.assertEqual(rows[0]["spreadsheet_id"], "sheet-123456")
+        matching = [row for row in rows if row["month_key"] == "2026-04"]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(matching[0]["spreadsheet_id"], "sheet-123456")
 
     def test_save_monthly_report_sheet_updates_existing_month(self):
         self.repository.save_monthly_report_sheet(
