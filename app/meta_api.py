@@ -73,6 +73,10 @@ class MetaClient:
             )
         return records
 
+    def validate_token(self) -> Dict[str, Any]:
+        """Call /me to verify the token is valid. Returns the /me response."""
+        return self._get("/me", params={"fields": "id,name"})
+
     def fetch_accessible_ad_accounts(self) -> List[Dict[str, str]]:
         rows = self._get_all(
             "/me/adaccounts",

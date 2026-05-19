@@ -760,6 +760,8 @@ def application(environ, start_response):
         required = ["platform", "creator_email", "auth_type"]
         if auth_type != "oauth":
             required.extend(["profile_name", "profile_identifier"])
+        if auth_type == "system_user":
+            required.append("access_token")
         if not all(form.get(field, "").strip() for field in required):
             return render_credentials_response(
                 start_response,
@@ -794,6 +796,30 @@ def application(environ, start_response):
                 )
             return redirect(start_response, authorization_url)
 
+        if auth_type == "system_user":
+            from app.meta_api import MetaApiError, MetaClient
+            _settings = REPOSITORY.get_integration_settings()
+            token = form["access_token"].strip()
+            try:
+                MetaClient(
+                    access_token=token,
+                    graph_api_version=_settings.get("meta_graph_api_version", "v22.0") or "v22.0",
+                ).validate_token()
+            except MetaApiError as exc:
+                return render_credentials_response(
+                    start_response,
+                    platform=form.get("platform", platform),
+                    query=query,
+                    error=f"トークンが無効です: {exc}",
+                    status="400 Bad Request",
+                    modal_state={
+                        "open": True,
+                        "step": 3,
+                        **form,
+                        "error": f"トークンが無効です: {exc}",
+                    },
+                )
+
         REPOSITORY.create_credential(
             platform=form["platform"],
             profile_name=form["profile_name"].strip(),
@@ -802,6 +828,7 @@ def application(environ, start_response):
             auth_expiry=form.get("auth_expiry", "").strip(),
             auth_type=form.get("auth_type", "manual").strip() or "manual",
             external_user_id=form.get("external_user_id", "").strip(),
+            access_token=form.get("access_token", "").strip(),
             token_expires_at=form.get("token_expires_at", "").strip(),
         )
         return redirect_to(

@@ -686,6 +686,10 @@ def render_credential_link_modal(
                 <p><span data-credential-selected-platform>{escape(PLATFORM_LABELS[selected_platform])}</span> / <span data-credential-selected-auth>{escape(AUTH_TYPE_LABELS.get(selected_auth_type, selected_auth_type))}</span> として保存されます。</p>
               </div>
               <div class="credential-form-grid">
+                <label data-system-user-token-field hidden style="grid-column:1/-1">アクセストークン <span class="required-mark">*</span>
+                  <textarea name="access_token" rows="3" placeholder="EAAB..." data-credential-access-token autocomplete="off" style="font-family:monospace;font-size:0.85em;resize:vertical"></textarea>
+                  <small style="color:#666">Meta Business Suite → 設定 → ユーザー → システムユーザーで発行したトークンを貼り付けてください。</small>
+                </label>
                 <label>認証プロフィール名
                   <input type="text" name="profile_name" value="{escape(modal_state.get('profile_name', ''))}" placeholder="例: DYMFRED003 / ながもと" data-credential-profile-name>
                 </label>
@@ -741,6 +745,8 @@ def render_credential_modal_script() -> str:
       const submitButton = modal.querySelector('[data-credential-submit-button]');
       const profileNameInput = modal.querySelector('[data-credential-profile-name]');
       const profileIdentifierInput = modal.querySelector('[data-credential-profile-identifier]');
+      const accessTokenLabel = modal.querySelector('[data-system-user-token-field]');
+      const accessTokenInput = modal.querySelector('[data-credential-access-token]');
       let isOpen = modal.dataset.open === 'true';
       let currentStep = Number(modal.dataset.step || '1');
       let selectedPlatform = modal.dataset.platform || 'meta';
@@ -797,6 +803,9 @@ def render_credential_modal_script() -> str:
         const requiresProfileFields = selectedAuthType !== 'oauth';
         profileNameInput.required = requiresProfileFields;
         profileIdentifierInput.required = requiresProfileFields;
+        const isSystemUser = selectedAuthType === 'system_user';
+        if (accessTokenLabel) accessTokenLabel.hidden = !isSystemUser;
+        if (accessTokenInput) accessTokenInput.required = isSystemUser;
       }
 
       function openModal() {
