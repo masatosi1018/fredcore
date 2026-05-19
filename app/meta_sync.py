@@ -244,6 +244,25 @@ def _resolve_account_access_token(account_row, repository, fallback_token: str) 
     return fallback_token.strip()
 
 
+def _preserve_sync_marker_for_forced_date(account_row, synced_report_date: str) -> str:
+    existing_last_synced = str(account_row["last_synced_report_date"] or "").strip()
+    if existing_last_synced:
+        try:
+            if date.fromisoformat(existing_last_synced) > date.fromisoformat(synced_report_date):
+                return existing_last_synced
+        except ValueError:
+            pass
+
+    created_at = str(account_row["created_at"] or "").strip()
+    if created_at:
+        try:
+            if date.fromisoformat(synced_report_date) < datetime.fromisoformat(created_at).date():
+                return ""
+        except ValueError:
+            pass
+    return synced_report_date
+
+
 def _sync_error_message(exc: Exception) -> str:
     message = str(exc).strip() or exc.__class__.__name__
     if len(message) > 120:
@@ -258,6 +277,7 @@ def sync_linked_meta_accounts_to_sheet(
     repository,
     project_root: Path,
     report_date_input: Optional[str] = None,
+    force_single_report_date: bool = False,
     meta_client_factory: Optional[Callable[..., object]] = None,
     sheets_client_factory: Optional[Callable[..., object]] = None,
 ) -> MetaDailySyncResult:
@@ -305,7 +325,11 @@ def sync_linked_meta_accounts_to_sheet(
             failure_messages.append(f"{account_name}: Meta トークン未設定")
             continue
 
-        start_date = _account_start_date(account_row, target_report_date)
+        start_date = (
+            target_report_date
+            if force_single_report_date
+            else _account_start_date(account_row, target_report_date)
+        )
         if start_date is None or start_date > target_report_date:
             continue
 
@@ -338,7 +362,16 @@ def sync_linked_meta_accounts_to_sheet(
             continue
 
         if last_report_date:
-            success_updates.append((account_db_id, last_report_date))
+            success_updates.append(
+                (
+                    account_db_id,
+                    (
+                        _preserve_sync_marker_for_forced_date(account_row, last_report_date)
+                        if force_single_report_date
+                        else last_report_date
+                    ),
+                )
+            )
 
     updated_count = 0
     appended_count = 0

@@ -28,6 +28,7 @@ def run_meta_daily_sync_job(
     project_root: Path,
     report_date_input: Optional[str] = None,
     trigger_source: str = "manual",
+    force_single_report_date: bool = False,
     meta_client_factory: Optional[Callable[..., object]] = None,
     sheets_client_factory: Optional[Callable[..., object]] = None,
 ) -> DailySyncJobResult:
@@ -47,6 +48,7 @@ def run_meta_daily_sync_job(
             repository=repository,
             project_root=project_root,
             report_date_input=report_date,
+            force_single_report_date=force_single_report_date,
             meta_client_factory=meta_client_factory,
             sheets_client_factory=sheets_client_factory,
         )

@@ -173,6 +173,23 @@ class SyncJobsTest(unittest.TestCase):
         self.assertEqual(rows[0]["job_name"], "meta_daily_spend_sync")
         self.assertEqual(rows[0]["status"], "成功")
 
+    def test_run_meta_daily_sync_job_can_force_single_historical_date(self):
+        job = run_meta_daily_sync_job(
+            self.repository,
+            settings=self.settings,
+            project_root=Path(self.temp_dir.name),
+            report_date_input="2000-01-01",
+            trigger_source="manual",
+            force_single_report_date=True,
+            meta_client_factory=FakeMetaDailyClient,
+            sheets_client_factory=FakeMetaDailySheetsClient,
+        )
+        self.assertEqual(job.result.row_count, 1)
+        self.assertEqual(job.result.failure_count, 0)
+        account = self.repository.list_accounts("meta")[0]
+        self.assertEqual(account["sync_status"], "同期済み")
+        self.assertIsNone(account["last_synced_report_date"])
+
     def test_run_meta_monthly_sync_job_records_failure(self):
         with self.assertRaises(RuntimeError):
             run_meta_monthly_sync_job(

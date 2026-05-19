@@ -1004,6 +1004,7 @@ def application(environ, start_response):
                 project_root=PROJECT_ROOT,
                 report_date_input=form.get("report_date", "").strip(),
                 trigger_source="manual",
+                force_single_report_date=True,
             )
         except Exception as exc:
             return redirect_to(
