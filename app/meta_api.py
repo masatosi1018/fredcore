@@ -29,13 +29,13 @@ class MetaClient:
         account = self._get(
             f"/act_{account_id}",
             params={
-                "fields": "id,name,account_currency,currency,timezone_name",
+                "fields": "id,name,currency,timezone_name",
             },
         )
         insights = self._get(
             f"/act_{account_id}/insights",
             params={
-                "fields": "account_id,account_name,account_currency,spend,date_start,date_stop",
+                "fields": "account_id,account_name,currency,spend,date_start,date_stop",
                 "time_range": json.dumps({"since": report_date, "until": report_date}),
                 "level": "account",
                 "limit": "1",
@@ -52,8 +52,7 @@ class MetaClient:
             account_id=str(insight_row.get("account_id") or account.get("id") or account_id),
             account_name=str(insight_row.get("account_name") or account.get("name") or ""),
             currency=str(
-                insight_row.get("account_currency")
-                or account.get("account_currency")
+                insight_row.get("currency")
                 or account.get("currency")
                 or ""
             ),
@@ -70,14 +69,14 @@ class MetaClient:
         account = self._get(
             f"/act_{account_id}",
             params={
-                "fields": "id,name,account_currency,currency,timezone_name",
+                "fields": "id,name,currency,timezone_name",
             },
         )
         insights = self._get(
             f"/act_{account_id}/insights",
             params={
                 "fields": (
-                    "account_id,account_name,account_currency,"
+                    "account_id,account_name,currency,"
                     "campaign_id,campaign_name,spend,impressions,clicks,actions,"
                     "date_start,date_stop"
                 ),
@@ -101,8 +100,7 @@ class MetaClient:
                     campaign_id=str(row.get("campaign_id") or ""),
                     campaign_name=str(row.get("campaign_name") or ""),
                     currency=str(
-                        row.get("account_currency")
-                        or account.get("account_currency")
+                        row.get("currency")
                         or account.get("currency")
                         or ""
                     ),
