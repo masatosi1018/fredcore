@@ -50,14 +50,6 @@ CREDENTIAL_AUTH_FLOW = {
                     "広告アカウント連携よりもシート連携用の管理に向いています。",
                 ),
             },
-            {
-                "value": "manual",
-                "label": "手動登録",
-                "description": "暫定の認証プロフィールを先に登録します。",
-                "notes": (
-                    "本番接続前に運用担当とアカウント紐付けだけ整理したい時に使います。",
-                ),
-            },
         ),
     },
     "meta": {
@@ -80,14 +72,6 @@ CREDENTIAL_AUTH_FLOW = {
                     "自動化用の Meta 認証を分けて管理したい時に向いています。",
                 ),
             },
-            {
-                "value": "manual",
-                "label": "手動登録",
-                "description": "接続前提を固めるための暫定プロフィールです。",
-                "notes": (
-                    "どのビジネスマネージャーで動かすか先に整理できます。",
-                ),
-            },
         ),
     },
     "tiktok": {
@@ -99,14 +83,6 @@ CREDENTIAL_AUTH_FLOW = {
                 "description": "TikTok Ads Manager アカウント連携を想定します。",
                 "notes": (
                     "TikTok 側の認証実装を入れた時にそのまま接続しやすい構成です。",
-                ),
-            },
-            {
-                "value": "manual",
-                "label": "手動登録",
-                "description": "運用設計を先に進めるためのプロフィール管理です。",
-                "notes": (
-                    "広告アカウント追加前に担当者と認証主体だけ決めておけます。",
                 ),
             },
         ),
@@ -753,7 +729,6 @@ def render_credential_modal_script() -> str:
       let selectedAuthType = modal.dataset.authType || 'oauth';
 
       const authTypeLabels = {
-        manual: '手動登録',
         oauth: 'OAuth連携',
         service_account: 'サービスアカウント',
         system_user: 'System User'
