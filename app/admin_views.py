@@ -276,7 +276,7 @@ def render_accounts_toolbar(active_platform: str, query: str) -> str:
       </div>
     </div>
     <script>
-    (() => {{
+    document.addEventListener('DOMContentLoaded', () => {{
       const selectAllChk = document.getElementById('accounts-select-all');
       const delinkBtn = document.getElementById('accounts-delink-btn');
       const bulkIdsInput = document.getElementById('accounts-bulk-ids');
@@ -308,7 +308,7 @@ def render_accounts_toolbar(active_platform: str, query: str) -> str:
         if (!count) {{ e.preventDefault(); return; }}
         if (!confirm(count + ' 件のアカウントの連携を解除しますか？')) e.preventDefault();
       }});
-    }})();
+    }});
     </script>
     """
 
