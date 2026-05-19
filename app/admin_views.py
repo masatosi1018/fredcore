@@ -265,14 +265,6 @@ def render_action_toolbar(primary_label: str, primary_href: str) -> str:
 def render_accounts_toolbar(active_platform: str, query: str) -> str:
     return f"""
     <div class="toolbar">
-      <form class="search-form" method="get" action="/accounts">
-        <input type="hidden" name="platform" value="{escape(active_platform)}">
-        <div class="search-input-wrap">
-          <span class="search-icon">⌕</span>
-          <input class="search-input" type="search" name="q" value="{escape(query)}" placeholder="アカウント名またはIDで検索">
-        </div>
-        <button class="secondary-btn" type="submit">フィルター</button>
-      </form>
       <div class="toolbar-actions">
         <button type="button" class="secondary-btn" id="accounts-select-all">全選択</button>
         <form method="post" action="/accounts/delete-bulk" id="accounts-bulk-form" style="display:inline">
@@ -331,14 +323,6 @@ def render_credentials_toolbar(active_platform: str, query: str) -> str:
     )
     return f"""
     <div class="toolbar">
-      <form class="search-form" method="get" action="/credentials">
-        <input type="hidden" name="platform" value="{escape(active_platform)}">
-        <div class="search-input-wrap">
-          <span class="search-icon">⌕</span>
-          <input class="search-input" type="search" name="q" value="{escape(query)}" placeholder="認証プロフィール名またはIDで検索">
-        </div>
-        <button class="secondary-btn" type="submit">フィルター</button>
-      </form>
       <div class="toolbar-actions">
         {reauth_all}
         <button class="primary-btn" type="button" data-open-platform-select-modal>認証情報を追加</button>
