@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Callable, Dict, List, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -130,6 +130,7 @@ class GoogleSheetsTableClient:
         self.row_key_factory = row_key_factory
         self.range_end = _column_label(len(self.headers))
         self.write_column_count = len(self.headers)
+        self._sheet_id: Optional[int] = None
 
     def _pad_row(self, row: Sequence[str]) -> List[str]:
         values = list(row)
@@ -142,18 +143,20 @@ class GoogleSheetsTableClient:
             self.service.spreadsheets()
             .get(
                 spreadsheetId=self.spreadsheet_id,
-                fields="sheets.properties.title",
+                fields="sheets.properties",
             )
             .execute()
         )
-        existing_titles = {
-            str(sheet.get("properties", {}).get("title") or "").strip()
-            for sheet in spreadsheet.get("sheets", [])
-        }
-        if self.sheet_name in existing_titles:
+        existing: Dict[str, int] = {}
+        for sheet in spreadsheet.get("sheets", []):
+            props = sheet.get("properties", {})
+            title = str(props.get("title") or "").strip()
+            existing[title] = props.get("sheetId")
+        if self.sheet_name in existing:
+            self._sheet_id = existing[self.sheet_name]
             return
 
-        (
+        response = (
             self.service.spreadsheets()
             .batchUpdate(
                 spreadsheetId=self.spreadsheet_id,
@@ -171,6 +174,8 @@ class GoogleSheetsTableClient:
             )
             .execute()
         )
+        added = response.get("replies", [{}])[0].get("addSheet", {}).get("properties", {})
+        self._sheet_id = added.get("sheetId")
 
     def ensure_header(self) -> None:
         self.ensure_sheet_exists()
@@ -270,5 +275,34 @@ class GoogleSheetsTableClient:
             )
 
         return len(updates), len(appends)
+
+    def sort_rows(self) -> None:
+        if self._sheet_id is None:
+            return
+        (
+            self.service.spreadsheets()
+            .batchUpdate(
+                spreadsheetId=self.spreadsheet_id,
+                body={
+                    "requests": [
+                        {
+                            "sortRange": {
+                                "range": {
+                                    "sheetId": self._sheet_id,
+                                    "startRowIndex": 1,
+                                },
+                                "sortSpecs": [
+                                    {
+                                        "dimensionIndex": 0,
+                                        "sortOrder": "ASCENDING",
+                                    }
+                                ],
+                            }
+                        }
+                    ]
+                },
+            )
+            .execute()
+        )
 
 

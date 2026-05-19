@@ -239,6 +239,7 @@ def sync_meta_campaigns_to_monthly_sheet(
     )
     sheets_client.ensure_header()
     updated_count, appended_count = sheets_client.upsert_rows(keyed_rows)
+    sheets_client.sort_rows()
 
     return MonthlyCampaignSyncResult(
         report_date=report_date,

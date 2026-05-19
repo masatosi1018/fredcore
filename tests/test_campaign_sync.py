@@ -69,6 +69,9 @@ class FakeCampaignSheetsClient:
         self.rows = list(keyed_rows)
         return (0, len(self.rows))
 
+    def sort_rows(self):
+        pass
+
 
 class FakeSheetManager:
     def __init__(self, service_account_file):
