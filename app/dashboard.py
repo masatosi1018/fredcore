@@ -34,12 +34,10 @@ from app.oauth_clients import (
     meta_oauth_config,
     metadata_json_for_oauth,
 )
-from app.report_sheets import ensure_monthly_report_sheet
 from app.sync_jobs import run_meta_monthly_sync_job
 from app.admin_views import (
     render_accounts_page,
     render_credentials_page,
-    render_report_sheet_form,
     render_report_sheets_page,
     render_settings_page,
     render_sync_runs_page,
@@ -591,13 +589,10 @@ def application(environ, start_response):
         )
 
     if path == "/report-sheets" and method == "GET":
-        settings = REPOSITORY.get_integration_settings()
         body = render_report_sheets_page(
             REPOSITORY.list_monthly_report_sheets(),
             notice=notice,
             error=error,
-            settings=settings,
-            default_month_key=date.today().strftime("%Y-%m"),
         )
         return respond_html(start_response, body)
 
@@ -614,10 +609,6 @@ def application(environ, start_response):
 
     if path == "/credentials/new" and method == "GET":
         return redirect_to(start_response, "/credentials", platform=platform)
-
-    if path == "/report-sheets/new" and method == "GET":
-        body = render_report_sheet_form(month_key=date.today().strftime("%Y-%m"))
-        return respond_html(start_response, body)
 
     if path == "/accounts/new" and method == "POST":
         form = parse_form(environ)
@@ -942,75 +933,6 @@ def application(environ, start_response):
             "/credentials",
             platform="meta",
             notice=f"{result} の Meta 認証情報を更新しました。",
-        )
-
-    if path == "/report-sheets/new" and method == "POST":
-        form = parse_form(environ)
-        month_key = form.get("month_key", "").strip()
-        spreadsheet_url = form.get("spreadsheet_url", "").strip()
-        spreadsheet_title = form.get("spreadsheet_title", "").strip()
-        status_value = form.get("status", "有効").strip() or "有効"
-        notes = form.get("notes", "").strip()
-
-        if (
-            not MONTH_KEY_PATTERN.match(month_key)
-            or not spreadsheet_url
-            or not spreadsheet_title
-        ):
-            body = render_report_sheet_form(
-                month_key=month_key,
-                spreadsheet_url=spreadsheet_url,
-                spreadsheet_title=spreadsheet_title,
-                status=status_value,
-                notes=notes,
-                error="対象月・スプレッドシートURL・スプレッドシート名を入力してください。",
-            )
-            return respond_html(start_response, body, "400 Bad Request")
-
-        REPOSITORY.save_monthly_report_sheet(
-            month_key=month_key,
-            spreadsheet_url=spreadsheet_url,
-            spreadsheet_title=spreadsheet_title,
-            status=status_value,
-            notes=notes,
-        )
-        return redirect_to(
-            start_response,
-            "/report-sheets",
-            notice=f"{month_key} の出力先スプレッドシートを保存しました。",
-        )
-
-    if path == "/report-sheets/auto-create" and method == "POST":
-        form = parse_form(environ)
-        month_key = form.get("month_key", "").strip()
-        if not MONTH_KEY_PATTERN.match(month_key):
-            return redirect_to(
-                start_response,
-                "/report-sheets",
-                error="対象月は YYYY-MM 形式で入力してください。",
-            )
-        try:
-            result = ensure_monthly_report_sheet(
-                REPOSITORY,
-                month_key=month_key,
-                settings=REPOSITORY.get_integration_settings(),
-                project_root=PROJECT_ROOT,
-            )
-        except Exception as exc:
-            return redirect_to(
-                start_response,
-                "/report-sheets",
-                error=str(exc),
-            )
-        message = (
-            f"{month_key} の月別スプシを共有ドライブへ自動作成しました。"
-            if result.created
-            else f"{month_key} の月別スプシはすでに登録済みです。"
-        )
-        return redirect_to(
-            start_response,
-            "/report-sheets",
-            notice=message,
         )
 
     if path == "/credentials/reauth-all" and method == "POST":

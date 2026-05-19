@@ -1456,42 +1456,6 @@ def render_monthly_campaign_sync_panel(sync_settings, sync_date: str) -> str:
     """
 
 
-def render_report_sheet_auto_create_panel(settings, month_key: str) -> str:
-    merged = merged_integration_settings(settings)
-    has_required_settings = bool(
-        merged["google_service_account_file"].strip()
-        and merged["google_reports_folder_id"].strip()
-    )
-    helper = (
-        "共有ドライブ配下の設定は保存済みです。月別スプシを自動作成できます。"
-        if has_required_settings
-        else "設定画面で Google サービスアカウント JSON と共有ドライブ配下のレポートフォルダID を入れると自動作成できます。"
-    )
-    action_html = (
-        f"""
-        <form class="sync-form" method="post" action="/report-sheets/auto-create">
-          <label>対象月
-            <input type="month" name="month_key" value="{escape(month_key)}">
-          </label>
-          <button class="primary-btn" type="submit">共有ドライブに自動作成</button>
-        </form>
-        """
-        if has_required_settings
-        else '<a class="primary-btn" href="/settings">設定を入力する</a>'
-    )
-    return f"""
-    <section class="sync-panel">
-      <div>
-        <h2>月別スプシを共有ドライブへ自動作成</h2>
-        <p>{escape(helper)}</p>
-        <div class="sync-meta">
-          <span>保存先フォルダ: {escape(merged["google_reports_folder_id"] or "未設定")}</span>
-          <span>初期タブ名: {escape(merged["google_monthly_report_sheet_tab_name"])}</span>
-        </div>
-      </div>
-      {action_html}
-    </section>
-    """
 
 
 def render_rules_page(
@@ -1933,10 +1897,6 @@ def render_report_sheets_page(
               <td>{escape(row["month_key"])}</td>
               <td>{escape(row["spreadsheet_title"])}</td>
               <td><a class="text-link" href="{escape(row["spreadsheet_url"])}" target="_blank" rel="noreferrer">スプレッドシートを開く</a></td>
-              <td>{escape(row["spreadsheet_id"])}</td>
-              <td><span class="badge green">{escape(row["status"])}</span></td>
-              <td>{escape(row["updated_at"])}</td>
-              <td>{escape(row["notes"] or "-")}</td>
               <td class="action-cell">
                 <form method="post" action="/report-sheets/{row["id"]}/delete">
                   <button class="danger-link" type="submit">削除</button>
@@ -1949,25 +1909,19 @@ def render_report_sheets_page(
     body = f"""
     {header}
     {render_feedback(notice, error)}
-    {render_report_sheet_auto_create_panel(settings or {}, default_month_key)}
     <section class="card">
-      {render_action_toolbar("月別スプシを追加", "/report-sheets/new")}
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
               <th>対象月</th>
-              <th>スプレッドシート名</th>
+              <th>スプシ名</th>
               <th>URL</th>
-              <th>スプレッドシートID</th>
-              <th>ステータス</th>
-              <th>更新日時</th>
-              <th>メモ</th>
               <th>アクション</th>
             </tr>
           </thead>
           <tbody>
-            {''.join(table_rows) if table_rows else '<tr><td colspan="8" class="empty">まだ月別スプレッドシートは登録されていません。</td></tr>'}
+            {''.join(table_rows) if table_rows else '<tr><td colspan="4" class="empty">まだ月別スプレッドシートは登録されていません。</td></tr>'}
           </tbody>
         </table>
       </div>

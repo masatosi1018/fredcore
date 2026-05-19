@@ -186,6 +186,26 @@ class AdminRepository:
                 "last_synced_report_date",
                 "TEXT",
             )
+            now = utc_now()
+            connection.execute(
+                """
+                INSERT INTO monthly_report_sheets (
+                    month_key, spreadsheet_id, spreadsheet_url, spreadsheet_title,
+                    status, notes, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(month_key) DO NOTHING
+                """,
+                (
+                    "2026-04",
+                    "17nTDKxppfLCcxkQ1XKcY72zfhv-Gup_ja2kuU96_efY",
+                    "https://docs.google.com/spreadsheets/d/17nTDKxppfLCcxkQ1XKcY72zfhv-Gup_ja2kuU96_efY/edit?usp=drivesdk",
+                    "2026年4月 広告消化キャンペーン一覧",
+                    "有効",
+                    "共有ドライブへ自動作成",
+                    now,
+                    now,
+                ),
+            )
 
     def _create_table_statements(self) -> List[str]:
         if self.backend == "postgres":
