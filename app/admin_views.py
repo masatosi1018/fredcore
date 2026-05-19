@@ -266,7 +266,6 @@ def render_accounts_toolbar(active_platform: str, query: str) -> str:
     return f"""
     <div class="toolbar">
       <div class="toolbar-actions">
-        <button type="button" class="secondary-btn" id="accounts-select-all">全選択</button>
         <form method="post" action="/accounts/delete-bulk" id="accounts-bulk-form" style="display:inline">
           <input type="hidden" name="platform" value="{escape(active_platform)}">
           <input type="hidden" name="q" value="{escape(query)}">
@@ -278,11 +277,11 @@ def render_accounts_toolbar(active_platform: str, query: str) -> str:
     </div>
     <script>
     (() => {{
-      const selectAllBtn = document.getElementById('accounts-select-all');
+      const selectAllChk = document.getElementById('accounts-select-all');
       const delinkBtn = document.getElementById('accounts-delink-btn');
       const bulkIdsInput = document.getElementById('accounts-bulk-ids');
       const bulkForm = document.getElementById('accounts-bulk-form');
-      if (!selectAllBtn) return;
+      if (!selectAllChk) return;
 
       function getBoxes() {{
         return [...document.querySelectorAll('.account-row-check')];
@@ -293,12 +292,12 @@ def render_accounts_toolbar(active_platform: str, query: str) -> str:
         delinkBtn.disabled = checked.length === 0;
         bulkIdsInput.value = checked.map(b => b.value).join(',');
         const allChecked = boxes.length > 0 && checked.length === boxes.length;
-        selectAllBtn.textContent = allChecked ? '選択解除' : '全選択';
+        selectAllChk.checked = allChecked;
+        selectAllChk.indeterminate = checked.length > 0 && !allChecked;
       }}
-      selectAllBtn.addEventListener('click', () => {{
+      selectAllChk.addEventListener('change', () => {{
         const boxes = getBoxes();
-        const allChecked = boxes.every(b => b.checked);
-        boxes.forEach(b => {{ b.checked = !allChecked; }});
+        boxes.forEach(b => {{ b.checked = selectAllChk.checked; }});
         updateState();
       }});
       document.addEventListener('change', e => {{
@@ -1716,7 +1715,7 @@ def render_accounts_page(
         <table>
           <thead>
             <tr>
-              <th class="checkbox-cell"></th>
+              <th class="checkbox-cell"><input type="checkbox" id="accounts-select-all"></th>
               <th>アカウント名</th>
               <th>認証プロフィール</th>
               <th>操作担当者</th>
