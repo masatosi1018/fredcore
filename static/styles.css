@@ -1302,3 +1302,31 @@ body.modal-open {
   background: #f3f4f6;
   color: #6b7280;
 }
+
+/* ── 同期履歴テーブル ─────────────────────────────────────────────────── */
+.sync-runs-table {
+  min-width: 860px;
+}
+
+.sync-runs-table col.sync-col-date    { width: 130px; }
+.sync-runs-table col.sync-col-trigger { width: 64px; }
+.sync-runs-table col.sync-col-month   { width: 80px; }
+.sync-runs-table col.sync-col-status  { width: 80px; }
+.sync-runs-table col.sync-col-sheet   { width: 180px; }
+.sync-runs-table col.sync-col-result  { width: auto; }
+
+.sync-runs-table td.sync-col-date,
+.sync-runs-table td.sync-col-trigger,
+.sync-runs-table td.sync-col-month,
+.sync-runs-table td.sync-col-status {
+  white-space: nowrap;
+}
+
+.sync-runs-table td.sync-col-status {
+  text-align: center;
+}
+
+.sync-runs-table td.sync-col-result {
+  color: #475569;
+  font-size: 14px;
+}

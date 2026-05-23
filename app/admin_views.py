@@ -2170,26 +2170,29 @@ def render_sync_runs_page(rows, *, notice: str = "", error: str = "", current_us
     table_rows = []
     for row in rows:
         status_class = "green" if row["status"] == "成功" else "warn" if row["status"] == "実行中" else "red"
+        trigger_label = {"manual": "手動", "cron": "自動"}.get(str(row["trigger_source"]), str(row["trigger_source"]))
         summary = (
-            f"対象アカウント {row['account_count']}件 / 行 {row['row_count']}件 / 更新 {row['updated_count']}件 / 追加 {row['appended_count']}件"
+            f"アカウント {row['account_count']}件 ／ 行 {row['row_count']}件 ／ 更新 {row['updated_count']}件 ／ 追加 {row['appended_count']}件"
             if row["status"] == "成功"
             else row["error_message"] or "-"
         )
         sheet_html = (
-            f'<a class="text-link" href="{escape(row["spreadsheet_url"])}" target="_blank" rel="noreferrer">{escape(row["spreadsheet_title"] or "月次スプシを開く")}</a>'
+            f'<a class="text-link" href="{escape(row["spreadsheet_url"])}" target="_blank" rel="noreferrer">{escape(row["spreadsheet_title"] or "スプレッドシートを開く")}</a>'
             if row["spreadsheet_url"]
-            else "-"
+            else '<span style="color:#9ca3af">ー</span>'
         )
+        started_at = str(row["started_at"] or "")
+        started_display = started_at.replace("T", " ")[:16] if started_at else "ー"
         table_rows.append(
             f"""
             <tr>
-              <td>{escape(row["started_at"])}</td>
-              <td>{escape(row["trigger_source"])}</td>
-              <td>{escape(row["report_date"])}</td>
-              <td>{escape(row["month_key"])}</td>
-              <td><span class="badge {status_class}">{escape(row["status"])}</span></td>
-              <td>{sheet_html}</td>
-              <td>{escape(summary)}</td>
+              <td class="sync-col-date">{escape(started_display)}</td>
+              <td class="sync-col-trigger">{escape(trigger_label)}</td>
+              <td class="sync-col-date">{escape(str(row["report_date"] or ""))}</td>
+              <td class="sync-col-month">{escape(str(row["month_key"] or ""))}</td>
+              <td class="sync-col-status"><span class="badge {status_class}">{escape(row["status"])}</span></td>
+              <td class="sync-col-sheet">{sheet_html}</td>
+              <td class="sync-col-result">{escape(summary)}</td>
             </tr>
             """
         )
@@ -2198,7 +2201,16 @@ def render_sync_runs_page(rows, *, notice: str = "", error: str = "", current_us
     {render_feedback(notice, error)}
     <section class="card">
       <div class="table-wrap">
-        <table>
+        <table class="sync-runs-table">
+          <colgroup>
+            <col class="sync-col-date">
+            <col class="sync-col-trigger">
+            <col class="sync-col-date">
+            <col class="sync-col-month">
+            <col class="sync-col-status">
+            <col class="sync-col-sheet">
+            <col class="sync-col-result">
+          </colgroup>
           <thead>
             <tr>
               <th>開始日時</th>
