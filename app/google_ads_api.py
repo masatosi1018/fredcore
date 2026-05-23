@@ -56,13 +56,16 @@ class GoogleAdsClient:
             headers["login-customer-id"] = self.login_customer_id
         return headers
 
-    def _search(self, customer_id: str, query: str, page_token: str = "") -> Dict[str, Any]:
+    def _search(self, customer_id: str, query: str, page_token: str = "", login_customer_id: str = "") -> Dict[str, Any]:
         body: Dict[str, Any] = {"query": query}
         if page_token:
             body["pageToken"] = page_token
+        headers = self._headers()
+        if login_customer_id:
+            headers["login-customer-id"] = login_customer_id
         response = self.session.post(
             f"{GOOGLE_ADS_BASE_URL}/customers/{customer_id}/googleAds:search",
-            headers=self._headers(),
+            headers=headers,
             json=body,
             timeout=self.timeout_seconds,
         )
@@ -109,28 +112,66 @@ class GoogleAdsClient:
         return response.json()
 
     def list_accessible_customers(self) -> List[Dict[str, str]]:
-        """Return all ad accounts accessible to the authenticated user."""
+        """Return all client ad accounts accessible to the authenticated user.
+
+        MCC (manager) accounts are expanded automatically — their child client
+        accounts are returned instead of the MCC itself.
+        """
         data = self._get("customers:listAccessibleCustomers")
         resource_names = data.get("resourceNames", [])
-        customers = []
+        customers: List[Dict[str, str]] = []
+        seen_ids: set = set()
+
         for resource_name in resource_names:
             customer_id = resource_name.split("/")[-1]
             try:
                 result = self._search(
                     customer_id,
-                    "SELECT customer.id, customer.descriptive_name FROM customer LIMIT 1",
+                    "SELECT customer.id, customer.descriptive_name, customer.manager FROM customer LIMIT 1",
                 )
                 rows = result.get("results", [])
-                if rows:
-                    customer = rows[0].get("customer", {})
-                    customers.append({
-                        "account_id": str(customer.get("id") or customer_id),
-                        "account_name": str(customer.get("descriptiveName") or customer_id),
-                    })
+                if not rows:
+                    if customer_id not in seen_ids:
+                        seen_ids.add(customer_id)
+                        customers.append({"account_id": customer_id, "account_name": customer_id})
+                    continue
+
+                customer = rows[0].get("customer", {})
+                is_manager = customer.get("manager", False)
+                cid = str(customer.get("id") or customer_id)
+                name = str(customer.get("descriptiveName") or customer_id)
+
+                if is_manager:
+                    # Expand MCC: fetch all non-manager child accounts
+                    try:
+                        child_result = self._search(
+                            customer_id,
+                            "SELECT customer_client.id, customer_client.descriptive_name, customer_client.manager"
+                            " FROM customer_client"
+                            " WHERE customer_client.manager = false"
+                            " AND customer_client.status = 'ENABLED'",
+                            login_customer_id=customer_id,
+                        )
+                        for child_row in child_result.get("results", []):
+                            cc = child_row.get("customerClient", {})
+                            child_id = str(cc.get("id") or "")
+                            child_name = str(cc.get("descriptiveName") or child_id)
+                            if child_id and child_id not in seen_ids:
+                                seen_ids.add(child_id)
+                                customers.append({"account_id": child_id, "account_name": child_name})
+                    except GoogleAdsError:
+                        # Fall back to showing the MCC itself if expansion fails
+                        if cid not in seen_ids:
+                            seen_ids.add(cid)
+                            customers.append({"account_id": cid, "account_name": f"{name} (MCC)"})
                 else:
-                    customers.append({"account_id": customer_id, "account_name": customer_id})
+                    if cid not in seen_ids:
+                        seen_ids.add(cid)
+                        customers.append({"account_id": cid, "account_name": name})
             except GoogleAdsError:
-                customers.append({"account_id": customer_id, "account_name": customer_id})
+                if customer_id not in seen_ids:
+                    seen_ids.add(customer_id)
+                    customers.append({"account_id": customer_id, "account_name": customer_id})
         return customers
 
     def fetch_account_daily_campaigns(
