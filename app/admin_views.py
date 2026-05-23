@@ -1332,14 +1332,19 @@ def render_account_link_modal_script() -> str:
       }
 
       function applySearch() {
-        const term = (searchInput.value || '').trim().toLowerCase();
+        if (!dynamicList) return;
+        const term = (searchInput ? searchInput.value : '').trim().toLowerCase();
         dynamicList.querySelectorAll('.account-choice-row').forEach((row) => {
           row.hidden = term ? !(row.dataset.accountSearch || '').includes(term) : false;
         });
       }
 
       function updateSelectAllLabel() {
-        const boxes = [...dynamicList.querySelectorAll('input[type="checkbox"]:not(:disabled)')].filter((b) => !b.closest('.account-choice-row').hidden);
+        if (!dynamicList || !selectAllButton) return;
+        const boxes = [...dynamicList.querySelectorAll('input[type="checkbox"]:not(:disabled)')].filter((b) => {
+          const row = b.closest('.account-choice-row');
+          return row && !row.hidden;
+        });
         if (!boxes.length) { selectAllButton.textContent = '全選択'; return; }
         selectAllButton.textContent = boxes.every((b) => b.checked) ? '選択解除' : '全選択';
       }
@@ -1411,9 +1416,15 @@ def render_account_link_modal_script() -> str:
       });
 
       searchInput.addEventListener('input', () => { applySearch(); updateSelectAllLabel(); });
+      searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
 
-      selectAllButton.addEventListener('click', () => {
-        const boxes = [...dynamicList.querySelectorAll('input[type="checkbox"]:not(:disabled)')].filter((b) => !b.closest('.account-choice-row').hidden);
+      selectAllButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (!dynamicList) return;
+        const boxes = [...dynamicList.querySelectorAll('input[type="checkbox"]:not(:disabled)')].filter((b) => {
+          const row = b.closest('.account-choice-row');
+          return row && !row.hidden;
+        });
         if (!boxes.length) return;
         const allChecked = boxes.every((b) => b.checked);
         boxes.forEach((b) => { b.checked = !allChecked; });
