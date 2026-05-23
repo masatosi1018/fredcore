@@ -171,11 +171,11 @@ def render_layout(title: str, body: str, current_path: str, current_user: Option
     user_html = f"""
       <div class="sidebar-user">
         <div class="avatar">{escape(user_initial)}</div>
-        <div>
+        <div style="flex:1;min-width:0">
           <div class="user-name">{escape(user_name or user_email)}</div>
           <div class="user-sub">{escape(user_email)}</div>
         </div>
-        <form method="post" action="/logout" style="margin-left:auto">
+        <form method="post" action="/logout" style="flex-shrink:0">
           <button class="logout-btn" type="submit" title="ログアウト">
             <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
           </button>

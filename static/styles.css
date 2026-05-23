@@ -95,8 +95,9 @@ select {
   border-radius: 16px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   background: #ffffff;
+  overflow: hidden;
 }
 
 .avatar {
@@ -130,11 +131,17 @@ select {
 
 .user-name {
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .user-sub {
   font-size: 12px;
   color: #9ca3af;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .content {
