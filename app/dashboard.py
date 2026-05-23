@@ -192,6 +192,7 @@ def serve_static(path: str, start_response):
         [
             ("Content-Type", content_type or "application/octet-stream"),
             ("Content-Length", str(len(body))),
+            ("Cache-Control", "public, max-age=31536000, immutable"),
         ],
     )
     return [body]
