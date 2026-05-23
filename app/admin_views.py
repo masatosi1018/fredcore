@@ -222,13 +222,13 @@ def render_auth_page(title: str, body: str) -> bytes:
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FredCore | {escape(title)}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/styles.css?v=3">
 </head>
 <body>
   <div class="auth-shell">
     <div class="auth-card">
       <div class="auth-brand">
-        <img src="/static/fredcore-logo.png" alt="FredCore" class="auth-brand-logo">
+        <img src="/static/fredcore-logo.png" alt="FredCore" style="display:block;width:120px;height:auto">
       </div>
       {body}
     </div>

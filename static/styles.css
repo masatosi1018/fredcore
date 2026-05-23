@@ -1199,11 +1199,26 @@ body.modal-open {
 .pwd-wrap {
   position: relative;
   width: 100%;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fafafa;
+  transition: border-color .15s, box-shadow .15s;
 }
 
-.pwd-wrap input {
+.pwd-wrap:focus-within {
+  border-color: #7c3aed;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+
+.auth-form .pwd-wrap input {
   width: 100%;
-  padding-right: 48px !important;
+  padding: 12px 48px 12px 14px !important;
+  border: none !important;
+  border-radius: 12px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
 }
 
 .pwd-toggle {
@@ -1221,7 +1236,6 @@ body.modal-open {
   align-items: center;
   justify-content: center;
   transition: color .15s;
-  border-radius: 0 12px 12px 0;
 }
 
 .pwd-toggle:hover {
