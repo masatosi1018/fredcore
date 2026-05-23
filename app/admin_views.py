@@ -357,11 +357,14 @@ def render_users_page(rows, current_user: dict, *, notice: str = "", error: str 
             </form>
             """
         else:
-            actions = f"""
+            role_btn = "" if is_admin else f"""
             <form method="post" action="/users/{row["id"]}/role">
-              <input type="hidden" name="role" value="{toggle_role}">
-              <button class="secondary-btn slim" type="submit">{toggle_label}</button>
+              <input type="hidden" name="role" value="admin">
+              <button class="secondary-btn slim" type="submit">管理者に変更</button>
             </form>
+            """
+            actions = f"""
+            {role_btn}
             <form method="post" action="/users/{row["id"]}/delete">
               <button class="danger-link outlined" type="submit">削除</button>
             </form>
