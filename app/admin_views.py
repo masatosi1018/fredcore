@@ -221,6 +221,7 @@ def render_auth_page(title: str, body: str) -> bytes:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FredCore | {escape(title)}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -240,9 +241,10 @@ def render_auth_page(title: str, body: str) -> bytes:
 _PASSWORD_TOGGLE_JS = """
 <script>
 function togglePwd(btn) {
-  var inp = btn.previousElementSibling;
+  var inp = btn.parentElement.querySelector('input');
+  var icon = btn.querySelector('i');
   inp.type = inp.type === 'password' ? 'text' : 'password';
-  btn.textContent = inp.type === 'password' ? '表示' : '隠す';
+  icon.className = inp.type === 'password' ? 'bi bi-eye' : 'bi bi-eye-slash';
 }
 </script>
 """
@@ -251,7 +253,9 @@ _PASSWORD_FIELD_HTML = """
 <label>{label}
   <div class="pwd-wrap">
     <input type="password" name="{name}" autocomplete="{ac}" {extra}>
-    <button type="button" class="pwd-toggle" onclick="togglePwd(this)">表示</button>
+    <button type="button" class="pwd-toggle" onclick="togglePwd(this)" aria-label="パスワードを表示">
+      <i class="bi bi-eye"></i>
+    </button>
   </div>
 </label>
 """
@@ -297,7 +301,7 @@ def render_register_page(*, error: str = "", notice: str = "", name: str = "", e
         <input type="email" name="email" value="{escape(email)}" autocomplete="email" required placeholder="you@example.com">
       </label>
       {_pwd_field("パスワード（8文字以上）", "password", autocomplete="new-password", extra='minlength="8" required placeholder="••••••••"')}
-      <button class="primary-btn" type="submit">アカウントを申請する</button>
+      <button class="primary-btn primary-btn--register" type="submit">アカウントを申請する</button>
     </form>
     <p class="auth-footer">すでにアカウントをお持ちの方は <a href="/login">ログイン</a></p>
     {_PASSWORD_TOGGLE_JS}

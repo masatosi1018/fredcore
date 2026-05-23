@@ -1114,13 +1114,14 @@ body.modal-open {
 }
 
 .auth-brand {
-  margin-bottom: 36px;
+  margin-bottom: 32px;
 }
 
 .auth-brand-logo {
   display: block;
-  height: 36px;
+  height: 28px;
   width: auto;
+  max-width: 160px;
 }
 
 .auth-title {
@@ -1182,6 +1183,10 @@ body.modal-open {
   transition: opacity .15s, transform .1s;
 }
 
+.auth-form .primary-btn--register {
+  background: linear-gradient(135deg, #059669 0%, #0891b2 100%);
+}
+
 .auth-form .primary-btn:hover {
   opacity: 0.92;
   transform: translateY(-1px);
@@ -1195,6 +1200,7 @@ body.modal-open {
 .pwd-wrap {
   display: flex;
   align-items: stretch;
+  width: 100%;
   border: 1.5px solid #e5e7eb;
   border-radius: 12px;
   overflow: hidden;
@@ -1226,19 +1232,20 @@ body.modal-open {
 .pwd-toggle {
   background: none;
   border: none;
-  border-left: 1.5px solid #e5e7eb;
   padding: 0 14px;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  color: #6b7280;
-  white-space: nowrap;
-  transition: color .15s, background .15s;
+  color: #9ca3af;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color .15s;
+  flex-shrink: 0;
 }
 
 .pwd-toggle:hover {
   color: #7c3aed;
-  background: #f5f3ff;
+  background: none;
 }
 
 .auth-footer {
