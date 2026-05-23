@@ -637,7 +637,6 @@ def render_account_link_modal(
         credential_items = []
         for row in credentials_by_platform[platform]:
             checked = " checked" if str(row["id"]) == selected_credential_id else ""
-            expiry = row["auth_expiry"] or "期限未設定"
             credential_items.append(
                 f"""
                 <label class="credential-choice-card">
@@ -648,7 +647,6 @@ def render_account_link_modal(
                   </div>
                   <div class="credential-choice-side">
                     <span class="badge green">{escape(row["status"])}</span>
-                    <span class="credential-choice-expiry">{escape(expiry)}</span>
                   </div>
                 </label>
                 """
