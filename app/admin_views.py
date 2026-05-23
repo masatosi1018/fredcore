@@ -234,6 +234,30 @@ def render_auth_page(title: str, body: str) -> bytes:
     return html.encode("utf-8")
 
 
+_PASSWORD_TOGGLE_JS = """
+<script>
+function togglePwd(btn) {
+  var inp = btn.previousElementSibling;
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  btn.textContent = inp.type === 'password' ? '表示' : '隠す';
+}
+</script>
+"""
+
+_PASSWORD_FIELD_HTML = """
+<label>{label}
+  <div class="pwd-wrap">
+    <input type="password" name="{name}" autocomplete="{ac}" {extra}>
+    <button type="button" class="pwd-toggle" onclick="togglePwd(this)">表示</button>
+  </div>
+</label>
+"""
+
+
+def _pwd_field(label: str, name: str, autocomplete: str = "current-password", extra: str = "") -> str:
+    return _PASSWORD_FIELD_HTML.format(label=label, name=name, ac=autocomplete, extra=extra)
+
+
 def render_login_page(*, error: str = "", next_url: str = "") -> bytes:
     next_input = f'<input type="hidden" name="next" value="{escape(next_url)}">' if next_url else ""
     error_html = f'<div class="feedback feedback-error">{escape(error)}</div>' if error else ""
@@ -245,13 +269,34 @@ def render_login_page(*, error: str = "", next_url: str = "") -> bytes:
       <label>メールアドレス
         <input type="email" name="email" autocomplete="email" required autofocus>
       </label>
-      <label>パスワード
-        <input type="password" name="password" autocomplete="current-password" required>
-      </label>
+      {_pwd_field("パスワード", "password", extra="required")}
       <button class="primary-btn" type="submit">ログイン</button>
     </form>
+    <p class="auth-footer">アカウントをお持ちでない方は <a href="/register">新規登録</a></p>
+    {_PASSWORD_TOGGLE_JS}
     """
     return render_auth_page("ログイン", body)
+
+
+def render_register_page(*, error: str = "", name: str = "", email: str = "") -> bytes:
+    error_html = f'<div class="feedback feedback-error">{escape(error)}</div>' if error else ""
+    body = f"""
+    <h1 class="auth-title">アカウント作成</h1>
+    {error_html}
+    <form method="post" action="/register" class="auth-form">
+      <label>名前
+        <input type="text" name="name" value="{escape(name)}" required autofocus>
+      </label>
+      <label>メールアドレス
+        <input type="email" name="email" value="{escape(email)}" autocomplete="email" required>
+      </label>
+      {_pwd_field("パスワード（8文字以上）", "password", autocomplete="new-password", extra='minlength="8" required')}
+      <button class="primary-btn" type="submit">アカウントを作成</button>
+    </form>
+    <p class="auth-footer">すでにアカウントをお持ちの方は <a href="/login">ログイン</a></p>
+    {_PASSWORD_TOGGLE_JS}
+    """
+    return render_auth_page("アカウント作成", body)
 
 
 def render_setup_page(*, error: str = "") -> bytes:
@@ -267,11 +312,10 @@ def render_setup_page(*, error: str = "") -> bytes:
       <label>メールアドレス
         <input type="email" name="email" required>
       </label>
-      <label>パスワード（8文字以上）
-        <input type="password" name="password" minlength="8" required>
-      </label>
+      {_pwd_field("パスワード（8文字以上）", "password", autocomplete="new-password", extra='minlength="8" required')}
       <button class="primary-btn" type="submit">管理者アカウントを作成</button>
     </form>
+    {_PASSWORD_TOGGLE_JS}
     """
     return render_auth_page("初回セットアップ", body)
 

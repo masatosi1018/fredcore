@@ -52,6 +52,7 @@ from app.admin_views import (
     render_credentials_page,
     render_login_page,
     render_new_user_page,
+    render_register_page,
     render_report_sheets_page,
     render_setup_page,
     render_sync_runs_page,
@@ -99,7 +100,7 @@ def ensure_repository_ready() -> None:
     _REPOSITORY_READY = True
 
 
-_PUBLIC_PATHS = frozenset({"/login", "/setup"})
+_PUBLIC_PATHS = frozenset({"/login", "/setup", "/register"})
 _PUBLIC_PREFIXES = ("/static/", "/oauth/", "/jobs/")
 
 
@@ -619,6 +620,40 @@ def application(environ, start_response):
                 "401 Unauthorized",
             )
         return respond_html(start_response, render_login_page())
+
+    # ── /register ──────────────────────────────────────────────────────────
+    if path == "/register":
+        if REPOSITORY.count_users() == 0:
+            return redirect(start_response, "/setup")
+        if method == "POST":
+            form = parse_form(environ)
+            name = form.get("name", "").strip()
+            email = form.get("email", "").strip()
+            password = form.get("password", "").strip()
+            if not name or not email or not password:
+                return respond_html(
+                    start_response,
+                    render_register_page(error="すべての項目を入力してください。", name=name, email=email),
+                )
+            if len(password) < 8:
+                return respond_html(
+                    start_response,
+                    render_register_page(error="パスワードは8文字以上で入力してください。", name=name, email=email),
+                )
+            try:
+                REPOSITORY.create_user(
+                    email=email,
+                    name=name,
+                    password_hash=hash_password(password),
+                    role="member",
+                )
+            except Exception:
+                return respond_html(
+                    start_response,
+                    render_register_page(error="このメールアドレスはすでに登録されています。", name=name, email=email),
+                )
+            return redirect(start_response, "/login")
+        return respond_html(start_response, render_register_page())
 
     # ── /logout ────────────────────────────────────────────────────────────
     if path == "/logout" and method == "POST":
