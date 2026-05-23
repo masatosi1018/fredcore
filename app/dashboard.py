@@ -1690,9 +1690,21 @@ def application(environ, start_response):
                     developer_token=developer_token,
                 )
                 accounts = client.list_accessible_customers()
+                # Normalize IDs (strip dashes) for comparison
+                def _norm(v: str) -> str:
+                    return v.replace("-", "").strip()
+                api_ids = {_norm(a["account_id"]) for a in accounts}
+                # Append already-linked accounts not returned by the API
+                for row in REPOSITORY.list_accounts(platform):
+                    if _norm(row["account_identifier"]) not in api_ids:
+                        accounts.append({
+                            "account_id": row["account_identifier"],
+                            "account_name": row["account_name"],
+                            "status": "ENABLED",
+                        })
                 return json_response({
                     "accounts": [
-                        {**a, "is_linked": a["account_id"] in linked_ids}
+                        {**a, "is_linked": _norm(a["account_id"]) in {_norm(i) for i in linked_ids}}
                         for a in accounts
                     ]
                 })
@@ -1707,14 +1719,22 @@ def application(environ, start_response):
             try:
                 graph_api_version = _settings.get("meta_graph_api_version", "v22.0") or "v22.0"
                 raw_accounts = MetaClient(access_token=token, graph_api_version=graph_api_version).fetch_accessible_ad_accounts()
+                api_meta_ids = {a["account_identifier"] for a in raw_accounts}
+                meta_accounts = [
+                    {"account_id": a["account_identifier"], "account_name": a["account_name"], "status": "ENABLED"}
+                    for a in raw_accounts
+                ]
+                for row in REPOSITORY.list_accounts(platform):
+                    if row["account_identifier"] not in api_meta_ids:
+                        meta_accounts.append({
+                            "account_id": row["account_identifier"],
+                            "account_name": row["account_name"],
+                            "status": "ENABLED",
+                        })
                 return json_response({
                     "accounts": [
-                        {
-                            "account_id": a["account_identifier"],
-                            "account_name": a["account_name"],
-                            "is_linked": a["account_identifier"] in linked_ids,
-                        }
-                        for a in raw_accounts
+                        {**a, "is_linked": a["account_id"] in linked_ids}
+                        for a in meta_accounts
                     ]
                 })
             except Exception as exc:
