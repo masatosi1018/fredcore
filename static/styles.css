@@ -994,6 +994,9 @@ body.modal-open {
   padding: 18px 20px;
   border-bottom: 1px solid #eef2f7;
 }
+.account-choice-row[hidden] {
+  display: none;
+}
 
 .account-choice-row:last-child {
   border-bottom: 0;
