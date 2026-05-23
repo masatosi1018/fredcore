@@ -835,6 +835,8 @@ def application(environ, start_response):
             for identifier in form.get("selected_account_ids", "").split(",")
             if identifier.strip()
         ]
+        _names_raw = form.get("selected_account_names", "").split("␞")
+        selected_account_names = [n.strip() for n in _names_raw]
         if selected_platform not in SUPPORTED_PLATFORMS:
             return render_accounts_response(
                 start_response,
@@ -881,10 +883,15 @@ def application(environ, start_response):
                     if identifier in discoverable_lookup
                 ]
             else:
-                discoverable_accounts = find_discoverable_accounts(
-                    selected_platform,
-                    selected_account_ids,
-                )
+                # Build account objects from form-submitted IDs and names (API-discovered accounts)
+                discoverable_accounts = [
+                    {
+                        "account_name": (selected_account_names[i] if i < len(selected_account_names) else "").strip() or identifier,
+                        "account_identifier": identifier,
+                        "timezone_name": "Asia/Tokyo",
+                    }
+                    for i, identifier in enumerate(selected_account_ids)
+                ]
         except (ConfigError, MetaApiError, ValueError) as exc:
             return render_accounts_response(
                 start_response,

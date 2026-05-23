@@ -754,6 +754,7 @@ def render_account_link_modal(
               <input type="hidden" name="platform" value="{escape(selected_platform)}" data-account-link-platform-input>
               <input type="hidden" name="credential_profile_id" value="{escape(selected_credential_id)}" data-account-link-credential-input>
               <input type="hidden" name="selected_account_ids" value="" data-account-link-accounts-input>
+              <input type="hidden" name="selected_account_names" value="" data-account-link-names-input>
               <div class="account-link-step-header">
                 <h3>連携するアカウントを選択してください</h3>
                 <p>認証プロフィール <span data-selected-credential-name>未選択</span> を使って、広告アカウントを追加します。</p>
@@ -1217,6 +1218,7 @@ def render_account_link_modal_script() -> str:
       const platformInput = modal.querySelector('[data-account-link-platform-input]');
       const credentialInput = modal.querySelector('[data-account-link-credential-input]');
       const accountsInput = modal.querySelector('[data-account-link-accounts-input]');
+      const accountNamesInput = modal.querySelector('[data-account-link-names-input]');
       const errorBox = modal.querySelector('[data-account-link-error]');
       const selectedCredentialName = modal.querySelector('[data-selected-credential-name]');
       const authContinueButton = modal.querySelector('[data-auth-continue-button]');
@@ -1439,18 +1441,26 @@ def render_account_link_modal_script() -> str:
         if (e.target.matches('input[type="checkbox"]')) updateSelectAllLabel();
       });
 
-      submitForm.addEventListener('submit', (e) => {
+      submitForm?.addEventListener('submit', (e) => {
         const credential = selectedCredential();
         if (!credential) {
           e.preventDefault(); showError('認証プロフィールを選択してください。'); goToStep(2); return;
         }
-        const selected = [...dynamicList.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)')].map((b) => b.value);
-        if (!selected.length) {
+        const checkedBoxes = dynamicList
+          ? [...dynamicList.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)')]
+          : [];
+        if (!checkedBoxes.length) {
           e.preventDefault(); showError('連携する広告アカウントを1件以上選択してください。'); return;
         }
-        platformInput.value = selectedPlatform;
-        credentialInput.value = credential.value;
-        accountsInput.value = selected.join(',');
+        const selected = checkedBoxes.map((b) => b.value);
+        const selectedNames = checkedBoxes.map((b) => {
+          const row = b.closest('.account-choice-row');
+          return (row?.querySelector('.account-choice-title')?.textContent || '').trim();
+        });
+        if (platformInput) platformInput.value = selectedPlatform;
+        if (credentialInput) credentialInput.value = credential.value;
+        if (accountsInput) accountsInput.value = selected.join(',');
+        if (accountNamesInput) accountNamesInput.value = selectedNames.join('␞');
       });
 
       updateView();
