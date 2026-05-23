@@ -278,11 +278,12 @@ def render_login_page(*, error: str = "", next_url: str = "") -> bytes:
     return render_auth_page("ログイン", body)
 
 
-def render_register_page(*, error: str = "", name: str = "", email: str = "") -> bytes:
+def render_register_page(*, error: str = "", notice: str = "", name: str = "", email: str = "") -> bytes:
     error_html = f'<div class="feedback feedback-error">{escape(error)}</div>' if error else ""
+    notice_html = f'<div class="feedback feedback-notice">{escape(notice)}</div>' if notice else ""
     body = f"""
     <h1 class="auth-title">アカウント作成</h1>
-    {error_html}
+    {error_html}{notice_html}
     <form method="post" action="/register" class="auth-form">
       <label>名前
         <input type="text" name="name" value="{escape(name)}" required autofocus>
@@ -333,13 +334,28 @@ def render_users_page(rows, current_user: dict, *, notice: str = "", error: str 
     table_rows = []
     for row in rows:
         is_admin = row["role"] == "admin"
+        status = str(row["status"])
+        is_pending = status == "承認待ち"
         role_label = "管理者" if is_admin else "メンバー"
         role_class = "green" if is_admin else "gray"
         is_self = row["email"] == current_user.get("email")
         toggle_role = "member" if is_admin else "admin"
         toggle_label = "メンバーに変更" if is_admin else "管理者に変更"
+        status_badge = (
+            '<span class="badge warn" style="margin-left:6px">承認待ち</span>'
+            if is_pending else ""
+        )
         if is_self:
             actions = '<span style="color:#9ca3af;font-size:13px">（自分）</span>'
+        elif is_pending:
+            actions = f"""
+            <form method="post" action="/users/{row["id"]}/approve">
+              <button class="table-btn primary" type="submit">承認する</button>
+            </form>
+            <form method="post" action="/users/{row["id"]}/delete">
+              <button class="table-btn danger" type="submit">削除</button>
+            </form>
+            """
         else:
             actions = f"""
             <form method="post" action="/users/{row["id"]}/role">
@@ -352,7 +368,7 @@ def render_users_page(rows, current_user: dict, *, notice: str = "", error: str 
             """
         table_rows.append(f"""
         <tr>
-          <td>{escape(row["name"])}</td>
+          <td>{escape(row["name"])}{status_badge}</td>
           <td>{escape(row["email"])}</td>
           <td><span class="badge {role_class}">{role_label}</span></td>
           <td>{escape(row["created_at"][:10] if row["created_at"] else "")}</td>

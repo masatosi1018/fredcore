@@ -603,6 +603,18 @@ def application(environ, start_response):
             password = form.get("password", "").strip()
             user = REPOSITORY.get_user_by_email(email)
             if user and verify_password(str(user["password_hash"]), password):
+                if str(user["status"]) == "承認待ち":
+                    return respond_html(
+                        start_response,
+                        render_login_page(error="このアカウントは管理者の承認待ちです。承認されるまでログインできません。"),
+                        "403 Forbidden",
+                    )
+                if str(user["status"]) != "有効":
+                    return respond_html(
+                        start_response,
+                        render_login_page(error="このアカウントは無効です。管理者にお問い合わせください。"),
+                        "403 Forbidden",
+                    )
                 token = generate_session_token()
                 expires = session_expires_at()
                 REPOSITORY.create_user_session(token, int(user["id"]), expires)
@@ -646,13 +658,16 @@ def application(environ, start_response):
                     name=name,
                     password_hash=hash_password(password),
                     role="member",
+                    status="承認待ち",
                 )
             except Exception:
                 return respond_html(
                     start_response,
                     render_register_page(error="このメールアドレスはすでに登録されています。", name=name, email=email),
                 )
-            return redirect(start_response, "/login")
+            return respond_html(start_response, render_register_page(
+                notice="アカウントを作成しました。管理者の承認をお待ちください。"
+            ))
         return respond_html(start_response, render_register_page())
 
     # ── /logout ────────────────────────────────────────────────────────────
@@ -1728,6 +1743,13 @@ def application(environ, start_response):
                 "400 Bad Request",
             )
         return redirect_to(start_response, "/users", notice=f"{name} を追加しました。")
+
+    if re.match(r"^/users/\d+/approve$", path) and method == "POST":
+        if current_user.get("role") != "admin":
+            return redirect_to(start_response, "/accounts")
+        user_id = int(path.split("/")[2])
+        REPOSITORY.update_user_status(user_id, "有効")
+        return redirect_to(start_response, "/users", notice="アカウントを承認しました。")
 
     if re.match(r"^/users/\d+/role$", path) and method == "POST":
         if current_user.get("role") != "admin":

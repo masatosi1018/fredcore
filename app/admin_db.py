@@ -906,15 +906,16 @@ class AdminRepository:
         name: str,
         password_hash: str,
         role: str = "member",
+        status: str = "有効",
     ) -> None:
         now = utc_now()
         with self.connect() as connection:
             connection.execute(
                 """
                 INSERT INTO users (email, name, password_hash, role, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, '有効', ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (email.strip(), name.strip(), password_hash, role, now, now),
+                (email.strip(), name.strip(), password_hash, role, status, now, now),
             )
 
     def list_users(self) -> List[sqlite3.Row]:
@@ -951,6 +952,14 @@ class AdminRepository:
             connection.execute(
                 "UPDATE users SET role = ?, updated_at = ? WHERE id = ?",
                 (role, now, user_id),
+            )
+
+    def update_user_status(self, user_id: int, status: str) -> None:
+        now = utc_now()
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE users SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now, user_id),
             )
 
     def delete_user(self, user_id: int) -> None:
