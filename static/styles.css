@@ -1305,28 +1305,34 @@ body.modal-open {
 
 /* ── 同期履歴テーブル ─────────────────────────────────────────────────── */
 .sync-runs-table {
-  min-width: 860px;
+  min-width: 760px;
+  table-layout: fixed;
+  width: 100%;
 }
 
-.sync-runs-table col.sync-col-date    { width: 130px; }
-.sync-runs-table col.sync-col-trigger { width: 64px; }
-.sync-runs-table col.sync-col-month   { width: 80px; }
-.sync-runs-table col.sync-col-status  { width: 80px; }
-.sync-runs-table col.sync-col-sheet   { width: 180px; }
-.sync-runs-table col.sync-col-result  { width: auto; }
+.sync-runs-table colgroup col:nth-child(1) { width: 140px; } /* 開始日時 */
+.sync-runs-table colgroup col:nth-child(2) { width: 60px;  } /* 実行元 */
+.sync-runs-table colgroup col:nth-child(3) { width: 100px; } /* 対象日 */
+.sync-runs-table colgroup col:nth-child(4) { width: 80px;  } /* 対象月 */
+.sync-runs-table colgroup col:nth-child(5) { width: 90px;  } /* ステータス */
+.sync-runs-table colgroup col:nth-child(6) { width: 90px;  } /* 出力先 */
+/* 結果列は残り全部 */
 
-.sync-runs-table td.sync-col-date,
-.sync-runs-table td.sync-col-trigger,
-.sync-runs-table td.sync-col-month,
-.sync-runs-table td.sync-col-status {
+.sync-runs-table th,
+.sync-runs-table td {
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sync-runs-table th:last-child,
+.sync-runs-table td:last-child {
+  white-space: normal;
+  overflow: visible;
+  color: #475569;
+  font-size: 14px;
 }
 
 .sync-runs-table td.sync-col-status {
   text-align: center;
-}
-
-.sync-runs-table td.sync-col-result {
-  color: #475569;
-  font-size: 14px;
 }

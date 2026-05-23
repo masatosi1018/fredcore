@@ -2177,7 +2177,7 @@ def render_sync_runs_page(rows, *, notice: str = "", error: str = "", current_us
             else row["error_message"] or "-"
         )
         sheet_html = (
-            f'<a class="text-link" href="{escape(row["spreadsheet_url"])}" target="_blank" rel="noreferrer">{escape(row["spreadsheet_title"] or "スプレッドシートを開く")}</a>'
+            f'<a class="text-link" href="{escape(row["spreadsheet_url"])}" target="_blank" rel="noreferrer">↗ {escape(row["month_key"] or "開く")}</a>'
             if row["spreadsheet_url"]
             else '<span style="color:#9ca3af">ー</span>'
         )
