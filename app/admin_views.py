@@ -207,6 +207,7 @@ def render_layout(title: str, body: str, current_path: str, current_user: Option
       {body}
     </main>
   </div>
+  <script>if (window.history && window.location.search) window.history.replaceState(null, '', window.location.pathname);</script>
 </body>
 </html>"""
     return html.encode("utf-8")
