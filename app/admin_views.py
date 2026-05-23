@@ -332,25 +332,31 @@ def render_users_page(rows, current_user: dict, *, notice: str = "", error: str 
     """
     table_rows = []
     for row in rows:
-        role_label = "管理者" if row["role"] == "admin" else "メンバー"
-        role_class = "green" if row["role"] == "admin" else "gray"
+        is_admin = row["role"] == "admin"
+        role_label = "管理者" if is_admin else "メンバー"
+        role_class = "green" if is_admin else "gray"
         is_self = row["email"] == current_user.get("email")
-        delete_btn = (
-            '<span style="color:#9ca3af;font-size:13px">（自分）</span>'
-            if is_self
-            else f"""
-            <form method="post" action="/users/{row["id"]}/delete">
+        toggle_role = "member" if is_admin else "admin"
+        toggle_label = "メンバーに変更" if is_admin else "管理者に変更"
+        if is_self:
+            actions = '<span style="color:#9ca3af;font-size:13px">（自分）</span>'
+        else:
+            actions = f"""
+            <form method="post" action="/users/{row["id"]}/role" style="display:inline">
+              <input type="hidden" name="role" value="{toggle_role}">
+              <button class="outlined slim" type="submit">{toggle_label}</button>
+            </form>
+            <form method="post" action="/users/{row["id"]}/delete" style="display:inline;margin-left:6px">
               <button class="danger-link" type="submit">削除</button>
             </form>
             """
-        )
         table_rows.append(f"""
         <tr>
           <td>{escape(row["name"])}</td>
           <td>{escape(row["email"])}</td>
           <td><span class="badge {role_class}">{role_label}</span></td>
           <td>{escape(row["created_at"][:10] if row["created_at"] else "")}</td>
-          <td class="action-cell">{delete_btn}</td>
+          <td class="action-cell">{actions}</td>
         </tr>
         """)
     body = f"""

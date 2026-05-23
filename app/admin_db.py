@@ -945,6 +945,14 @@ class AdminRepository:
                 (password_hash, now, user_id),
             )
 
+    def update_user_role(self, user_id: int, role: str) -> None:
+        now = utc_now()
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE users SET role = ?, updated_at = ? WHERE id = ?",
+                (role, now, user_id),
+            )
+
     def delete_user(self, user_id: int) -> None:
         with self.connect() as connection:
             connection.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))

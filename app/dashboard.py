@@ -1729,6 +1729,18 @@ def application(environ, start_response):
             )
         return redirect_to(start_response, "/users", notice=f"{name} を追加しました。")
 
+    if re.match(r"^/users/\d+/role$", path) and method == "POST":
+        if current_user.get("role") != "admin":
+            return redirect_to(start_response, "/accounts")
+        user_id = int(path.split("/")[2])
+        if REPOSITORY.get_user_by_id(user_id) and REPOSITORY.get_user_by_id(user_id)["email"] == current_user.get("email"):
+            return redirect_to(start_response, "/users", error="自分自身の役割は変更できません。")
+        form = parse_form(environ)
+        new_role = form.get("role", "").strip()
+        if new_role in ("admin", "member"):
+            REPOSITORY.update_user_role(user_id, new_role)
+        return redirect_to(start_response, "/users", notice="役割を変更しました。")
+
     if re.match(r"^/users/\d+/delete$", path) and method == "POST":
         if current_user.get("role") != "admin":
             return redirect_to(start_response, "/accounts")
