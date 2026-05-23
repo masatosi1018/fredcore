@@ -383,7 +383,7 @@ def render_users_page(rows, current_user: dict, *, notice: str = "", error: str 
           <td>{escape(row["email"])}</td>
           <td><span class="badge {role_class}">{role_label}</span></td>
           <td>{escape(row["created_at"][:10] if row["created_at"] else "")}</td>
-          <td class="action-cell">{actions}</td>
+          <td><div class="action-cell">{actions}</div></td>
         </tr>
         """)
     body = f"""
@@ -1672,11 +1672,11 @@ def render_rules_page(
               <td><span class="badge {status_class}">{escape(row["status"])}</span></td>
               <td><span class="pill">{escape(row["owner_email"])}</span></td>
               <td>{escape(row["updated_at"])}</td>
-              <td class="action-cell">
+              <td><div class="action-cell">
                 <form method="post" action="/rules/{row["id"]}/delete?platform={escape(active_platform)}&q={escape(query)}">
                   <button class="danger-link outlined" type="submit">削除</button>
                 </form>
-              </td>
+              </div></td>
             </tr>
             """
         )
@@ -1820,11 +1820,11 @@ def render_accounts_page(
               <td><span class="badge green">{escape(row["credential_profile_name"] or "-")}</span></td>
               <td style="white-space:nowrap">{escape(row["operator_email"])}</td>
               <td>{escape(row["parent_account"])}</td>
-              <td class="action-cell">
+              <td><div class="action-cell">
                 <form method="post" action="/accounts/{row["id"]}/delete?platform={escape(active_platform)}&q={escape(query)}">
                   <button class="danger-link" type="submit">削除</button>
                 </form>
-              </td>
+              </div></td>
             </tr>
             """
         )
@@ -1905,14 +1905,14 @@ def render_credentials_page(
               <td>{_fmt_date(str(row["auth_expiry"] or ""))}</td>
               <td style="white-space:nowrap">{escape(row["creator_email"])}</td>
               <td style="white-space:nowrap">{_fmt_datetime(str(row["created_at"] or ""))}</td>
-              <td class="action-cell" style="white-space:nowrap">
-                <form method="post" action="/credentials/{row["id"]}/reauth?platform={escape(active_platform)}&q={escape(query)}" style="display:inline">
+              <td style="white-space:nowrap"><div class="action-cell">
+                <form method="post" action="/credentials/{row["id"]}/reauth?platform={escape(active_platform)}&q={escape(query)}">
                   <button class="secondary-btn slim" type="submit">再認証</button>
                 </form>
-                <form method="post" action="/credentials/{row["id"]}/delete?platform={escape(active_platform)}&q={escape(query)}" style="display:inline">
+                <form method="post" action="/credentials/{row["id"]}/delete?platform={escape(active_platform)}&q={escape(query)}">
                   <button class="danger-link outlined" type="submit">削除</button>
                 </form>
-              </td>
+              </div></td>
             </tr>
             """
         )
@@ -2074,11 +2074,11 @@ def render_report_sheets_page(
               <td>{escape(row["month_key"])}</td>
               <td>{escape(row["spreadsheet_title"])}</td>
               <td><a class="text-link" href="{escape(row["spreadsheet_url"])}" target="_blank" rel="noreferrer">スプレッドシートを開く</a></td>
-              <td class="action-cell">
+              <td><div class="action-cell">
                 <form method="post" action="/report-sheets/{row["id"]}/delete">
                   <button class="danger-link" type="submit">削除</button>
                 </form>
-              </td>
+              </div></td>
             </tr>
             """
         )
