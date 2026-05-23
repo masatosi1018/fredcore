@@ -291,6 +291,7 @@ input[type="url"] {
 
 .secondary-btn.slim {
   padding: 8px 14px;
+  font-size: 13px;
 }
 
 .outlined {
