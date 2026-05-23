@@ -228,7 +228,7 @@ def render_auth_page(title: str, body: str) -> bytes:
   <div class="auth-shell">
     <div class="auth-card">
       <div class="auth-brand">
-        <img src="/static/fredcore-logo.png" alt="FredCore" style="display:block;width:120px;height:auto">
+        <img src="/static/fredcore-logo.png" alt="FredCore" style="display:block;width:120px;height:auto;margin:0 auto">
       </div>
       {body}
     </div>
@@ -270,7 +270,6 @@ def render_login_page(*, error: str = "", next_url: str = "") -> bytes:
     error_html = f'<div class="feedback feedback-error">{escape(error)}</div>' if error else ""
     body = f"""
     <h1 class="auth-title">ログイン</h1>
-    <p class="auth-desc">広告データ管理ダッシュボードにサインイン</p>
     {error_html}
     <form method="post" action="/login" class="auth-form">
       {next_input}

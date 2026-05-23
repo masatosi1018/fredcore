@@ -1115,6 +1115,7 @@ body.modal-open {
 
 .auth-brand {
   margin-bottom: 32px;
+  text-align: center;
 }
 
 .auth-brand-logo {
