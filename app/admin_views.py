@@ -1325,26 +1325,34 @@ def render_account_link_modal_script() -> str:
 
       function updateCredentialSummary() {
         const credential = selectedCredential();
-        selectedCredentialName.textContent = credential
-          ? credential.closest('.credential-choice-card').querySelector('.credential-choice-title').textContent
-          : '未選択';
-        credentialInput.value = credential ? credential.value : '';
+        if (selectedCredentialName) {
+          selectedCredentialName.textContent = credential
+            ? credential.closest('.credential-choice-card').querySelector('.credential-choice-title').textContent
+            : '未選択';
+        }
+        if (credentialInput) credentialInput.value = credential ? credential.value : '';
       }
 
       function applySearch() {
         if (!dynamicList) return;
         const term = (searchInput ? searchInput.value : '').trim().toLowerCase();
         dynamicList.querySelectorAll('.account-choice-row').forEach((row) => {
-          row.hidden = term ? !(row.dataset.accountSearch || '').includes(term) : false;
+          const hide = term ? !(row.dataset.accountSearch || '').includes(term) : false;
+          row.style.display = hide ? 'none' : '';
+        });
+      }
+
+      function visibleBoxes() {
+        if (!dynamicList) return [];
+        return [...dynamicList.querySelectorAll('input[type="checkbox"]:not(:disabled)')].filter((b) => {
+          const row = b.closest('.account-choice-row');
+          return row && row.style.display !== 'none';
         });
       }
 
       function updateSelectAllLabel() {
-        if (!dynamicList || !selectAllButton) return;
-        const boxes = [...dynamicList.querySelectorAll('input[type="checkbox"]:not(:disabled)')].filter((b) => {
-          const row = b.closest('.account-choice-row');
-          return row && !row.hidden;
-        });
+        if (!selectAllButton) return;
+        const boxes = visibleBoxes();
         if (!boxes.length) { selectAllButton.textContent = '全選択'; return; }
         selectAllButton.textContent = boxes.every((b) => b.checked) ? '選択解除' : '全選択';
       }
@@ -1367,9 +1375,9 @@ def render_account_link_modal_script() -> str:
         authPanels.forEach((panel) => {
           panel.hidden = panel.dataset.authPanel !== selectedPlatform;
         });
-        platformInput.value = selectedPlatform;
+        if (platformInput) platformInput.value = selectedPlatform;
         updateCredentialSummary();
-        authContinueButton.disabled = !selectedCredential();
+        if (authContinueButton) authContinueButton.disabled = !selectedCredential();
         applySearch();
         updateSelectAllLabel();
         if (currentStep === 3 && selectedCredential()) {
@@ -1404,9 +1412,9 @@ def render_account_link_modal_script() -> str:
       modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
       document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen) closeModal(); });
 
-      modal.querySelector('[data-next-account-link-step="2"]').addEventListener('click', () => goToStep(2));
+      modal.querySelector('[data-next-account-link-step="2"]')?.addEventListener('click', () => goToStep(2));
 
-      modal.querySelector('[data-next-account-link-step="3"]').addEventListener('click', () => {
+      modal.querySelector('[data-next-account-link-step="3"]')?.addEventListener('click', () => {
         if (!selectedCredential()) { showError('認証プロフィールを選択してください。'); return; }
         goToStep(3);
       });
@@ -1415,23 +1423,19 @@ def render_account_link_modal_script() -> str:
         btn.addEventListener('click', () => goToStep(Number(btn.dataset.prevAccountLinkStep)));
       });
 
-      searchInput.addEventListener('input', () => { applySearch(); updateSelectAllLabel(); });
-      searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+      searchInput?.addEventListener('input', () => { applySearch(); updateSelectAllLabel(); });
+      searchInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
 
-      selectAllButton.addEventListener('click', (e) => {
+      selectAllButton?.addEventListener('click', (e) => {
         e.preventDefault();
-        if (!dynamicList) return;
-        const boxes = [...dynamicList.querySelectorAll('input[type="checkbox"]:not(:disabled)')].filter((b) => {
-          const row = b.closest('.account-choice-row');
-          return row && !row.hidden;
-        });
+        const boxes = visibleBoxes();
         if (!boxes.length) return;
         const allChecked = boxes.every((b) => b.checked);
         boxes.forEach((b) => { b.checked = !allChecked; });
         updateSelectAllLabel();
       });
 
-      dynamicList.addEventListener('change', (e) => {
+      dynamicList?.addEventListener('change', (e) => {
         if (e.target.matches('input[type="checkbox"]')) updateSelectAllLabel();
       });
 
