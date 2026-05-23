@@ -1119,9 +1119,8 @@ body.modal-open {
 
 .auth-brand-logo {
   display: block;
-  height: 28px;
-  width: auto;
-  max-width: 160px;
+  width: 120px;
+  height: auto;
 }
 
 .auth-title {
@@ -1198,54 +1197,35 @@ body.modal-open {
 }
 
 .pwd-wrap {
-  display: flex;
-  align-items: stretch;
+  position: relative;
   width: 100%;
-  border: 1.5px solid #e5e7eb;
-  border-radius: 12px;
-  overflow: hidden;
-  transition: border-color .15s, box-shadow .15s;
-  background: #fafafa;
-}
-
-.pwd-wrap:focus-within {
-  border-color: #7c3aed;
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
 }
 
 .pwd-wrap input {
-  flex: 1;
-  border: none;
-  border-radius: 0;
-  outline: none;
-  padding: 12px 14px;
-  font-size: 15px;
-  background: transparent;
-}
-
-.pwd-wrap input:focus {
-  border-color: transparent;
-  box-shadow: none;
+  width: 100%;
+  padding-right: 48px !important;
 }
 
 .pwd-toggle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 46px;
   background: none;
   border: none;
-  padding: 0 14px;
   cursor: pointer;
   color: #9ca3af;
-  font-size: 18px;
+  font-size: 17px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: color .15s;
-  flex-shrink: 0;
+  border-radius: 0 12px 12px 0;
 }
 
 .pwd-toggle:hover {
   color: #7c3aed;
-  background: none;
 }
 
 .auth-footer {
