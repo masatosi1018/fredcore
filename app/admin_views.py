@@ -1214,13 +1214,12 @@ def render_rule_action(row) -> str:
     return escape(row["action_type"])
 
 
-def _sync_panel_html(title: str, status_label: str, meta_html: str, action_html: str) -> str:
+def _sync_panel_html(title: str, status_label: str, action_html: str) -> str:
     return f"""
     <section class="sync-panel">
       <div>
         <h2>{title}</h2>
         <p>{escape(status_label)}</p>
-        <div class="sync-meta">{meta_html}</div>
       </div>
       {action_html}
     </section>
@@ -1257,12 +1256,7 @@ def render_meta_sync_panel(active_platform: str, sync_settings, sync_date: str) 
         if has_sheet
         else '<a class="primary-btn" href="/settings">設定を入力する</a>'
     )
-    meta_html = (
-        f'<span>転記タブ: {escape(merged["google_monthly_report_sheet_tab_name"])}</span>'
-        f'<span>固定スプシID: {escape(merged["google_spreadsheet_id"] or "未設定")}</span>'
-        f'<span>保存先フォルダ: {escape(merged["google_reports_folder_id"] or "未設定")}</span>'
-    )
-    return _sync_panel_html("Meta 数値をキャンペーン一覧へ反映", status_label, meta_html, action_html)
+    return _sync_panel_html("Meta 数値をキャンペーン一覧へ反映", status_label, action_html)
 
 
 def render_google_sync_panel(sync_settings, sync_date: str) -> str:
@@ -1284,12 +1278,7 @@ def render_google_sync_panel(sync_settings, sync_date: str) -> str:
         if has_sheet
         else '<a class="primary-btn" href="/settings">設定を入力する</a>'
     )
-    meta_html = (
-        f'<span>転記タブ: {escape(merged["google_monthly_report_sheet_tab_name"])}</span>'
-        f'<span>固定スプシID: {escape(merged["google_spreadsheet_id"] or "未設定")}</span>'
-        f'<span>保存先フォルダ: {escape(merged["google_reports_folder_id"] or "未設定")}</span>'
-    )
-    return _sync_panel_html("Google 広告 数値をキャンペーン一覧へ反映", status_label, meta_html, action_html)
+    return _sync_panel_html("Google 広告 数値をキャンペーン一覧へ反映", status_label, action_html)
 
 
 def render_tiktok_sync_panel(sync_settings, sync_date: str) -> str:
@@ -1311,12 +1300,7 @@ def render_tiktok_sync_panel(sync_settings, sync_date: str) -> str:
         if has_sheet
         else '<a class="primary-btn" href="/settings">設定を入力する</a>'
     )
-    meta_html = (
-        f'<span>転記タブ: {escape(merged["google_monthly_report_sheet_tab_name"])}</span>'
-        f'<span>固定スプシID: {escape(merged["google_spreadsheet_id"] or "未設定")}</span>'
-        f'<span>保存先フォルダ: {escape(merged["google_reports_folder_id"] or "未設定")}</span>'
-    )
-    return _sync_panel_html("TikTok 広告 数値をキャンペーン一覧へ反映", status_label, meta_html, action_html)
+    return _sync_panel_html("TikTok 広告 数値をキャンペーン一覧へ反映", status_label, action_html)
 
 
 def render_monthly_campaign_sync_panel(sync_settings, sync_date: str) -> str:
