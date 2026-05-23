@@ -350,20 +350,20 @@ def render_users_page(rows, current_user: dict, *, notice: str = "", error: str 
         elif is_pending:
             actions = f"""
             <form method="post" action="/users/{row["id"]}/approve">
-              <button class="table-btn primary" type="submit">承認する</button>
+              <button class="secondary-btn slim" type="submit">承認する</button>
             </form>
             <form method="post" action="/users/{row["id"]}/delete">
-              <button class="table-btn danger" type="submit">削除</button>
+              <button class="danger-link outlined" type="submit">削除</button>
             </form>
             """
         else:
             actions = f"""
             <form method="post" action="/users/{row["id"]}/role">
               <input type="hidden" name="role" value="{toggle_role}">
-              <button class="table-btn" type="submit">{toggle_label}</button>
+              <button class="secondary-btn slim" type="submit">{toggle_label}</button>
             </form>
             <form method="post" action="/users/{row["id"]}/delete">
-              <button class="table-btn danger" type="submit">削除</button>
+              <button class="danger-link outlined" type="submit">削除</button>
             </form>
             """
         table_rows.append(f"""
