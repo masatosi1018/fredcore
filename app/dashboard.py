@@ -536,6 +536,49 @@ def fetch_linkable_accounts(
     }
 
 
+def _parse_date_range(form: dict, max_days: int = 31):
+    """フォームから開始日・終了日を取得して日付リストを返す。エラー時は ([], message)。"""
+    from datetime import date as _date, timedelta as _td
+    raw_start = form.get("start_date", "").strip() or form.get("report_date", "").strip()
+    raw_end = form.get("end_date", "").strip() or raw_start
+    try:
+        start = _date.fromisoformat(raw_start) if raw_start else _date.today() - _td(days=1)
+        end = _date.fromisoformat(raw_end) if raw_end else start
+    except ValueError:
+        return [], "日付の形式が正しくありません。"
+    if end < start:
+        end = start
+    days = (end - start).days + 1
+    if days > max_days:
+        return [], f"期間は最大 {max_days} 日間までです（選択: {days} 日間）。"
+    return [
+        (start + _td(days=i)).isoformat() for i in range(days)
+    ], ""
+
+
+def _zero_sync_totals() -> dict:
+    return {"account_count": 0, "row_count": 0, "updated_count": 0, "appended_count": 0}
+
+
+def _add_sync_totals(total: dict, result) -> None:
+    total["account_count"] = max(total["account_count"], result.account_count)
+    total["row_count"] += result.row_count
+    total["updated_count"] += result.updated_count
+    total["appended_count"] += result.appended_count
+
+
+def _sync_range_notice(platform_label: str, date_range: list, total: dict, last_result) -> str:
+    if len(date_range) == 1:
+        date_str = date_range[0]
+    else:
+        date_str = f"{date_range[0]} 〜 {date_range[-1]}（{len(date_range)}日間）"
+    return (
+        f"{date_str} の {platform_label} 数値をキャンペーン一覧へ反映しました。"
+        f" 対象アカウント {total['account_count']}件 / 行数 {total['row_count']}件"
+        f" / 更新 {total['updated_count']}件 / 追加 {total['appended_count']}件。"
+    )
+
+
 def application(environ, start_response):
     setup_testing_defaults(environ)
     path = environ.get("PATH_INFO", "/")
@@ -1250,100 +1293,69 @@ def application(environ, start_response):
 
     if path == "/accounts/meta/sync" and method == "POST":
         form = parse_form(environ)
+        settings = get_config()
+        date_range, range_error = _parse_date_range(form)
+        if range_error:
+            return redirect_to(start_response, "/accounts", platform="meta", error=range_error)
+        total = _zero_sync_totals()
+        last_result = None
         try:
-            job = run_meta_monthly_sync_job(
-                settings=get_config(),
-                repository=REPOSITORY,
-                project_root=PROJECT_ROOT,
-                report_date_input=form.get("report_date", "").strip(),
-                trigger_source="manual",
-            )
+            for d in date_range:
+                job = run_meta_monthly_sync_job(
+                    settings=settings, repository=REPOSITORY, project_root=PROJECT_ROOT,
+                    report_date_input=d, trigger_source="manual",
+                )
+                last_result = job.result
+                _add_sync_totals(total, last_result)
         except Exception as exc:
-            return redirect_to(
-                start_response,
-                "/accounts",
-                platform="meta",
-                report_date=form.get("report_date", "").strip(),
-                error=str(exc),
-            )
-
-        result = job.result
-        created_message = (
-            f" 月次スプシを新規作成: {result.spreadsheet_title}"
-            if result.created_spreadsheet
-            else ""
-        )
-        return redirect_to(
-            start_response,
-            "/accounts",
-            platform="meta",
-            report_date=result.report_date,
-            notice=(
-                f"{result.report_date} の Meta 数値をキャンペーン一覧へ反映しました。"
-                f" 対象アカウント {result.account_count}件 / 行数 {result.row_count}件 / 更新 {result.updated_count}件 / 追加 {result.appended_count}件。"
-                f"{created_message}"
-            ),
-        )
+            return redirect_to(start_response, "/accounts", platform="meta", error=str(exc))
+        notice = _sync_range_notice("Meta", date_range, total, last_result)
+        return redirect_to(start_response, "/accounts", platform="meta",
+                           report_date=date_range[-1], notice=notice)
 
     if path == "/accounts/google/sync" and method == "POST":
         form = parse_form(environ)
+        settings = get_config()
+        date_range, range_error = _parse_date_range(form)
+        if range_error:
+            return redirect_to(start_response, "/accounts", platform="google", error=range_error)
+        total = _zero_sync_totals()
+        last_result = None
         try:
-            job = run_google_ads_monthly_sync_job(
-                settings=get_config(),
-                repository=REPOSITORY,
-                project_root=PROJECT_ROOT,
-                report_date_input=form.get("report_date", "").strip(),
-                trigger_source="manual",
-            )
+            for d in date_range:
+                job = run_google_ads_monthly_sync_job(
+                    settings=settings, repository=REPOSITORY, project_root=PROJECT_ROOT,
+                    report_date_input=d, trigger_source="manual",
+                )
+                last_result = job.result
+                _add_sync_totals(total, last_result)
         except Exception as exc:
-            return redirect_to(
-                start_response,
-                "/accounts",
-                platform="google",
-                report_date=form.get("report_date", "").strip(),
-                error=str(exc),
-            )
-        result = job.result
-        return redirect_to(
-            start_response,
-            "/accounts",
-            platform="google",
-            report_date=result.report_date,
-            notice=(
-                f"{result.report_date} の Google 広告 数値をキャンペーン一覧へ反映しました。"
-                f" 対象アカウント {result.account_count}件 / 行数 {result.row_count}件 / 更新 {result.updated_count}件 / 追加 {result.appended_count}件。"
-            ),
-        )
+            return redirect_to(start_response, "/accounts", platform="google", error=str(exc))
+        notice = _sync_range_notice("Google 広告", date_range, total, last_result)
+        return redirect_to(start_response, "/accounts", platform="google",
+                           report_date=date_range[-1], notice=notice)
 
     if path == "/accounts/tiktok/sync" and method == "POST":
         form = parse_form(environ)
+        settings = get_config()
+        date_range, range_error = _parse_date_range(form)
+        if range_error:
+            return redirect_to(start_response, "/accounts", platform="tiktok", error=range_error)
+        total = _zero_sync_totals()
+        last_result = None
         try:
-            job = run_tiktok_monthly_sync_job(
-                settings=get_config(),
-                repository=REPOSITORY,
-                project_root=PROJECT_ROOT,
-                report_date_input=form.get("report_date", "").strip(),
-                trigger_source="manual",
-            )
+            for d in date_range:
+                job = run_tiktok_monthly_sync_job(
+                    settings=settings, repository=REPOSITORY, project_root=PROJECT_ROOT,
+                    report_date_input=d, trigger_source="manual",
+                )
+                last_result = job.result
+                _add_sync_totals(total, last_result)
         except Exception as exc:
-            return redirect_to(
-                start_response,
-                "/accounts",
-                platform="tiktok",
-                report_date=form.get("report_date", "").strip(),
-                error=str(exc),
-            )
-        result = job.result
-        return redirect_to(
-            start_response,
-            "/accounts",
-            platform="tiktok",
-            report_date=result.report_date,
-            notice=(
-                f"{result.report_date} の TikTok 広告 数値をキャンペーン一覧へ反映しました。"
-                f" 対象アカウント {result.account_count}件 / 行数 {result.row_count}件 / 更新 {result.updated_count}件 / 追加 {result.appended_count}件。"
-            ),
-        )
+            return redirect_to(start_response, "/accounts", platform="tiktok", error=str(exc))
+        notice = _sync_range_notice("TikTok 広告", date_range, total, last_result)
+        return redirect_to(start_response, "/accounts", platform="tiktok",
+                           report_date=date_range[-1], notice=notice)
 
     if path == "/accounts/meta/monthly-sync" and method == "POST":
         form = parse_form(environ)

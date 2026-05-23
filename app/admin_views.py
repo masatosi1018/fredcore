@@ -1511,8 +1511,11 @@ def _sync_panel_html(title: str, status_label: str, action_html: str) -> str:
 def _sync_form_html(action: str, sync_date: str, btn_label: str) -> str:
     return f"""
     <form class="sync-form" method="post" action="{action}">
-      <label>対象日
-        <input type="date" name="report_date" value="{escape(sync_date)}">
+      <label>開始日
+        <input type="date" name="start_date" value="{escape(sync_date)}">
+      </label>
+      <label>終了日
+        <input type="date" name="end_date" value="{escape(sync_date)}">
       </label>
       <button class="primary-btn" type="submit">{btn_label}</button>
     </form>
