@@ -28,12 +28,17 @@ select {
 }
 
 .sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
   width: 240px;
   background: #ffffff;
   border-right: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
+  flex-shrink: 0;
 }
 
 .brand {
