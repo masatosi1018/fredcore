@@ -1268,6 +1268,11 @@ def render_account_link_modal_script() -> str:
           const accountName = String(account.account_name || accountId).trim();
           const searchText = `${accountName} ${accountId}`.toLowerCase();
           const isLinked = !!account.is_linked;
+          const status = String(account.status || 'ENABLED');
+          const isSuspended = status !== 'ENABLED';
+          const badges = [];
+          if (isLinked) badges.push('<span class="badge warn">連携済み</span>');
+          if (isSuspended) badges.push('<span class="badge gray">強制停止中</span>');
           return `
             <label class="account-choice-row" data-account-search="${escapeHtml(searchText)}">
               <input type="checkbox" value="${escapeHtml(accountId)}" data-platform="${escapeHtml(selectedPlatform)}"${isLinked ? ' disabled' : ''}>
@@ -1276,7 +1281,7 @@ def render_account_link_modal_script() -> str:
                 <div class="account-choice-meta">${escapeHtml(accountId)}</div>
               </div>
               <div class="account-choice-side">
-                ${isLinked ? '<span class="badge warn">連携済み</span>' : ''}
+                ${badges.join('')}
               </div>
             </label>
           `;
