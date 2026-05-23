@@ -226,7 +226,9 @@ def render_auth_page(title: str, body: str) -> bytes:
 <body>
   <div class="auth-shell">
     <div class="auth-card">
-      <div class="auth-brand">FredCore</div>
+      <div class="auth-brand">
+        <img src="/static/fredcore-logo.png" alt="FredCore" class="auth-brand-logo">
+      </div>
       {body}
     </div>
   </div>
@@ -264,13 +266,14 @@ def render_login_page(*, error: str = "", next_url: str = "") -> bytes:
     error_html = f'<div class="feedback feedback-error">{escape(error)}</div>' if error else ""
     body = f"""
     <h1 class="auth-title">ログイン</h1>
+    <p class="auth-desc">広告データ管理ダッシュボードにサインイン</p>
     {error_html}
     <form method="post" action="/login" class="auth-form">
       {next_input}
       <label>メールアドレス
-        <input type="email" name="email" autocomplete="email" required autofocus>
+        <input type="email" name="email" autocomplete="email" required autofocus placeholder="you@example.com">
       </label>
-      {_pwd_field("パスワード", "password", extra="required")}
+      {_pwd_field("パスワード", "password", extra='required placeholder="••••••••"')}
       <button class="primary-btn" type="submit">ログイン</button>
     </form>
     <p class="auth-footer">アカウントをお持ちでない方は <a href="/register">新規登録</a></p>
@@ -284,16 +287,17 @@ def render_register_page(*, error: str = "", notice: str = "", name: str = "", e
     notice_html = f'<div class="feedback feedback-notice">{escape(notice)}</div>' if notice else ""
     body = f"""
     <h1 class="auth-title">アカウント作成</h1>
+    <p class="auth-desc">申請後、管理者が承認するとログインできます</p>
     {error_html}{notice_html}
     <form method="post" action="/register" class="auth-form">
       <label>名前
-        <input type="text" name="name" value="{escape(name)}" required autofocus>
+        <input type="text" name="name" value="{escape(name)}" required autofocus placeholder="山田 太郎">
       </label>
       <label>メールアドレス
-        <input type="email" name="email" value="{escape(email)}" autocomplete="email" required>
+        <input type="email" name="email" value="{escape(email)}" autocomplete="email" required placeholder="you@example.com">
       </label>
-      {_pwd_field("パスワード（8文字以上）", "password", autocomplete="new-password", extra='minlength="8" required')}
-      <button class="primary-btn" type="submit">アカウントを作成</button>
+      {_pwd_field("パスワード（8文字以上）", "password", autocomplete="new-password", extra='minlength="8" required placeholder="••••••••"')}
+      <button class="primary-btn" type="submit">アカウントを申請する</button>
     </form>
     <p class="auth-footer">すでにアカウントをお持ちの方は <a href="/login">ログイン</a></p>
     {_PASSWORD_TOGGLE_JS}
@@ -305,16 +309,16 @@ def render_setup_page(*, error: str = "") -> bytes:
     error_html = f'<div class="feedback feedback-error">{escape(error)}</div>' if error else ""
     body = f"""
     <h1 class="auth-title">初回セットアップ</h1>
-    <p class="auth-desc">最初の管理者アカウントを作成します。</p>
+    <p class="auth-desc">最初の管理者アカウントを作成します</p>
     {error_html}
     <form method="post" action="/setup" class="auth-form">
       <label>名前
-        <input type="text" name="name" required autofocus>
+        <input type="text" name="name" required autofocus placeholder="山田 太郎">
       </label>
       <label>メールアドレス
-        <input type="email" name="email" required>
+        <input type="email" name="email" required placeholder="you@example.com">
       </label>
-      {_pwd_field("パスワード（8文字以上）", "password", autocomplete="new-password", extra='minlength="8" required')}
+      {_pwd_field("パスワード（8文字以上）", "password", autocomplete="new-password", extra='minlength="8" required placeholder="••••••••"')}
       <button class="primary-btn" type="submit">管理者アカウントを作成</button>
     </form>
     {_PASSWORD_TOGGLE_JS}
