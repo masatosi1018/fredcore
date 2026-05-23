@@ -889,6 +889,7 @@ def application(environ, start_response):
                         "account_name": (selected_account_names[i] if i < len(selected_account_names) else "").strip() or identifier,
                         "account_identifier": identifier,
                         "timezone_name": "Asia/Tokyo",
+                        "parent_account": "",
                     }
                     for i, identifier in enumerate(selected_account_ids)
                 ]
