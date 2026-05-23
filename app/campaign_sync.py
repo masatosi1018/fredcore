@@ -466,6 +466,7 @@ def sync_tiktok_campaigns_to_monthly_sheet(
         records = client_by_token[access_token].fetch_account_daily_campaigns(
             advertiser_id=advertiser_id,
             report_date=report_date,
+            advertiser_name=str(account_row.get("account_name") or advertiser_id),
         )
         account_count += 1
         for record in records:

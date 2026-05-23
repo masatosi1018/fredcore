@@ -1749,6 +1749,42 @@ def application(environ, start_response):
                 })
             except Exception as exc:
                 return json_response({"error": str(exc)}, "500 Internal Server Error")
+        if platform == "tiktok":
+            from app.tiktok_api import TikTokAdsClient, TikTokAdsError
+            from app.meta_sync import merged_integration_settings
+            try:
+                merged = merged_integration_settings(get_config())
+                app_id = merged.get("tiktok_app_id", "").strip()
+                secret = merged.get("tiktok_app_secret", "").strip()
+                if not app_id or not secret:
+                    return json_response(
+                        {"error": "TikTok App ID / App Secret が設定されていません。Vercel の環境変数に追加してください。"},
+                        "500 Internal Server Error",
+                    )
+                access_token = str(credential.get("access_token") or "").strip()
+                if not access_token:
+                    return json_response(
+                        {"error": "TikTok アクセストークンがありません。TikTok 認証をやり直してください。"},
+                        "400 Bad Request",
+                    )
+                client = TikTokAdsClient(access_token=access_token, app_id=app_id, secret=secret)
+                accounts = client.list_accessible_advertisers()
+                api_ids = {a["account_id"] for a in accounts}
+                for row in REPOSITORY.list_accounts(platform):
+                    if row["account_identifier"] not in api_ids:
+                        accounts.append({
+                            "account_id": row["account_identifier"],
+                            "account_name": row["account_name"],
+                            "status": "ENABLED",
+                        })
+                return json_response({
+                    "accounts": [
+                        {**a, "is_linked": a["account_id"] in linked_ids}
+                        for a in accounts
+                    ]
+                })
+            except (TikTokAdsError, Exception) as exc:
+                return json_response({"error": str(exc)}, "500 Internal Server Error")
         return json_response({"error": "このプラットフォームは未対応です"}, "400 Bad Request")
 
     # ── ユーザー管理（管理者のみ）────────────────────────────────────────

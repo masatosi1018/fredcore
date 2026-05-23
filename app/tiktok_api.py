@@ -18,13 +18,45 @@ class TikTokAdsError(RuntimeError):
 
 
 class TikTokAdsClient:
-    def __init__(self, access_token: str, timeout_seconds: int = 30):
+    def __init__(self, access_token: str, app_id: str = "", secret: str = "", timeout_seconds: int = 30):
         self.access_token = access_token
+        self.app_id = app_id
+        self.secret = secret
         self.timeout_seconds = timeout_seconds
         self.session = requests.Session()
 
     def _headers(self) -> Dict[str, str]:
         return {"Access-Token": self.access_token}
+
+    def list_accessible_advertisers(self) -> List[Dict[str, str]]:
+        """Return all advertiser accounts accessible to the authenticated user."""
+        response = self.session.get(
+            f"{TIKTOK_API_BASE_URL}/oauth2/advertiser/get/",
+            params={
+                "app_id": self.app_id,
+                "secret": self.secret,
+                "access_token": self.access_token,
+            },
+            timeout=self.timeout_seconds,
+        )
+        try:
+            body = response.json()
+        except ValueError:
+            raise TikTokAdsError(f"TikTok API error ({response.status_code}): {response.text[:400]}")
+        code = body.get("code", -1)
+        if code != 0:
+            message = body.get("message") or str(body)
+            raise TikTokAdsError(f"TikTok API error [{code}]: {message}")
+        items = body.get("data", {}).get("list", [])
+        return [
+            {
+                "account_id": str(item.get("advertiser_id") or ""),
+                "account_name": str(item.get("advertiser_name") or item.get("advertiser_id") or ""),
+                "status": "ENABLED",
+            }
+            for item in items
+            if item.get("advertiser_id")
+        ]
 
     def _get(self, path: str, params: Dict[str, Any]) -> Dict[str, Any]:
         response = self.session.get(
@@ -72,8 +104,10 @@ class TikTokAdsClient:
         self,
         advertiser_id: str,
         report_date: str,
+        advertiser_name: str = "",
     ) -> List[CampaignPerformanceRecord]:
         campaign_names = self._fetch_campaign_names(advertiser_id)
+        display_name = advertiser_name or advertiser_id
         fetched_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         records: List[CampaignPerformanceRecord] = []
         page = 1
@@ -103,7 +137,7 @@ class TikTokAdsClient:
                         report_date=report_date,
                         platform="tiktok",
                         account_id=advertiser_id,
-                        account_name=advertiser_id,
+                        account_name=display_name,
                         campaign_id=campaign_id,
                         campaign_name=campaign_name,
                         currency="",
