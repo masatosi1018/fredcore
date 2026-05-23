@@ -1102,6 +1102,66 @@ def application(environ, start_response):
             ),
         )
 
+    if path == "/accounts/google/sync" and method == "POST":
+        form = parse_form(environ)
+        try:
+            job = run_google_ads_monthly_sync_job(
+                settings=get_config(),
+                repository=REPOSITORY,
+                project_root=PROJECT_ROOT,
+                report_date_input=form.get("report_date", "").strip(),
+                trigger_source="manual",
+            )
+        except Exception as exc:
+            return redirect_to(
+                start_response,
+                "/accounts",
+                platform="google",
+                report_date=form.get("report_date", "").strip(),
+                error=str(exc),
+            )
+        result = job.result
+        return redirect_to(
+            start_response,
+            "/accounts",
+            platform="google",
+            report_date=result.report_date,
+            notice=(
+                f"{result.report_date} の Google 広告 数値をキャンペーン一覧へ反映しました。"
+                f" 対象アカウント {result.account_count}件 / 行数 {result.row_count}件 / 更新 {result.updated_count}件 / 追加 {result.appended_count}件。"
+            ),
+        )
+
+    if path == "/accounts/tiktok/sync" and method == "POST":
+        form = parse_form(environ)
+        try:
+            job = run_tiktok_monthly_sync_job(
+                settings=get_config(),
+                repository=REPOSITORY,
+                project_root=PROJECT_ROOT,
+                report_date_input=form.get("report_date", "").strip(),
+                trigger_source="manual",
+            )
+        except Exception as exc:
+            return redirect_to(
+                start_response,
+                "/accounts",
+                platform="tiktok",
+                report_date=form.get("report_date", "").strip(),
+                error=str(exc),
+            )
+        result = job.result
+        return redirect_to(
+            start_response,
+            "/accounts",
+            platform="tiktok",
+            report_date=result.report_date,
+            notice=(
+                f"{result.report_date} の TikTok 広告 数値をキャンペーン一覧へ反映しました。"
+                f" 対象アカウント {result.account_count}件 / 行数 {result.row_count}件 / 更新 {result.updated_count}件 / 追加 {result.appended_count}件。"
+            ),
+        )
+
     if path == "/accounts/meta/monthly-sync" and method == "POST":
         form = parse_form(environ)
         try:

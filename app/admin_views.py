@@ -1214,9 +1214,33 @@ def render_rule_action(row) -> str:
     return escape(row["action_type"])
 
 
+def _sync_panel_html(title: str, status_label: str, meta_html: str, action_html: str) -> str:
+    return f"""
+    <section class="sync-panel">
+      <div>
+        <h2>{title}</h2>
+        <p>{escape(status_label)}</p>
+        <div class="sync-meta">{meta_html}</div>
+      </div>
+      {action_html}
+    </section>
+    """
+
+
+def _sync_form_html(action: str, sync_date: str, btn_label: str) -> str:
+    return f"""
+    <form class="sync-form" method="post" action="{action}">
+      <label>対象日
+        <input type="date" name="report_date" value="{escape(sync_date)}">
+      </label>
+      <button class="primary-btn" type="submit">{btn_label}</button>
+    </form>
+    """
+
+
 def render_meta_sync_panel(active_platform: str, sync_settings, sync_date: str) -> str:
     merged = merged_integration_settings(sync_settings)
-    has_required_settings = bool(
+    has_sheet = bool(
         merged["google_service_account_file"].strip()
         and (
             merged["google_reports_folder_id"].strip()
@@ -1225,35 +1249,74 @@ def render_meta_sync_panel(active_platform: str, sync_settings, sync_date: str) 
     )
     status_label = (
         "Google Sheets の設定は保存済みです。Meta は連携済み認証プロフィールのトークンを優先して使い、キャンペーン一覧タブへ反映します。"
-        if has_required_settings
-        else "同期前に設定画面で Google サービスアカウント JSON と、保存先フォルダID または既存スプレッドシートID を入れてください。"
+        if has_sheet
+        else "同期前に Google サービスアカウント JSON と、保存先フォルダID または既存スプレッドシートID を設定してください。"
     )
     action_html = (
-        f"""
-        <form class="sync-form" method="post" action="/accounts/meta/sync">
-          <label>対象日
-            <input type="date" name="report_date" value="{escape(sync_date)}">
-          </label>
-          <button class="primary-btn" type="submit">指定日の数値をキャンペーン一覧へ反映</button>
-        </form>
-        """
-        if has_required_settings
+        _sync_form_html("/accounts/meta/sync", sync_date, "指定日の数値をキャンペーン一覧へ反映")
+        if has_sheet
         else '<a class="primary-btn" href="/settings">設定を入力する</a>'
     )
-    return f"""
-    <section class="sync-panel">
-      <div>
-        <h2>Meta 数値をキャンペーン一覧へ反映</h2>
-        <p>{escape(status_label)}</p>
-        <div class="sync-meta">
-          <span>転記タブ: {escape(merged["google_monthly_report_sheet_tab_name"])}</span>
-          <span>固定スプシID: {escape(merged["google_spreadsheet_id"] or "未設定")}</span>
-          <span>保存先フォルダ: {escape(merged["google_reports_folder_id"] or "未設定")}</span>
-        </div>
-      </div>
-      {action_html}
-    </section>
-    """
+    meta_html = (
+        f'<span>転記タブ: {escape(merged["google_monthly_report_sheet_tab_name"])}</span>'
+        f'<span>固定スプシID: {escape(merged["google_spreadsheet_id"] or "未設定")}</span>'
+        f'<span>保存先フォルダ: {escape(merged["google_reports_folder_id"] or "未設定")}</span>'
+    )
+    return _sync_panel_html("Meta 数値をキャンペーン一覧へ反映", status_label, meta_html, action_html)
+
+
+def render_google_sync_panel(sync_settings, sync_date: str) -> str:
+    merged = merged_integration_settings(sync_settings)
+    has_sheet = bool(
+        merged["google_service_account_file"].strip()
+        and (
+            merged["google_reports_folder_id"].strip()
+            or merged["google_spreadsheet_id"].strip()
+        )
+    )
+    status_label = (
+        "Google Sheets の設定は保存済みです。Google 広告は連携済み認証プロフィールのトークンを優先して使い、キャンペーン一覧タブへ反映します。"
+        if has_sheet
+        else "同期前に Google サービスアカウント JSON と、保存先フォルダID または既存スプレッドシートID を設定してください。"
+    )
+    action_html = (
+        _sync_form_html("/accounts/google/sync", sync_date, "指定日の数値をキャンペーン一覧へ反映")
+        if has_sheet
+        else '<a class="primary-btn" href="/settings">設定を入力する</a>'
+    )
+    meta_html = (
+        f'<span>転記タブ: {escape(merged["google_monthly_report_sheet_tab_name"])}</span>'
+        f'<span>固定スプシID: {escape(merged["google_spreadsheet_id"] or "未設定")}</span>'
+        f'<span>保存先フォルダ: {escape(merged["google_reports_folder_id"] or "未設定")}</span>'
+    )
+    return _sync_panel_html("Google 広告 数値をキャンペーン一覧へ反映", status_label, meta_html, action_html)
+
+
+def render_tiktok_sync_panel(sync_settings, sync_date: str) -> str:
+    merged = merged_integration_settings(sync_settings)
+    has_sheet = bool(
+        merged["google_service_account_file"].strip()
+        and (
+            merged["google_reports_folder_id"].strip()
+            or merged["google_spreadsheet_id"].strip()
+        )
+    )
+    status_label = (
+        "Google Sheets の設定は保存済みです。TikTok は連携済み認証プロフィールのトークンを優先して使い、キャンペーン一覧タブへ反映します。"
+        if has_sheet
+        else "同期前に Google サービスアカウント JSON と、保存先フォルダID または既存スプレッドシートID を設定してください。"
+    )
+    action_html = (
+        _sync_form_html("/accounts/tiktok/sync", sync_date, "指定日の数値をキャンペーン一覧へ反映")
+        if has_sheet
+        else '<a class="primary-btn" href="/settings">設定を入力する</a>'
+    )
+    meta_html = (
+        f'<span>転記タブ: {escape(merged["google_monthly_report_sheet_tab_name"])}</span>'
+        f'<span>固定スプシID: {escape(merged["google_spreadsheet_id"] or "未設定")}</span>'
+        f'<span>保存先フォルダ: {escape(merged["google_reports_folder_id"] or "未設定")}</span>'
+    )
+    return _sync_panel_html("TikTok 広告 数値をキャンペーン一覧へ反映", status_label, meta_html, action_html)
 
 
 def render_monthly_campaign_sync_panel(sync_settings, sync_date: str) -> str:
@@ -1498,8 +1561,13 @@ def render_accounts_page(
             """
         )
     sync_panel = ""
-    if active_platform == "meta" and sync_settings is not None:
-        sync_panel = render_meta_sync_panel(active_platform, sync_settings, sync_date)
+    if sync_settings is not None:
+        if active_platform == "meta":
+            sync_panel = render_meta_sync_panel(active_platform, sync_settings, sync_date)
+        elif active_platform == "google":
+            sync_panel = render_google_sync_panel(sync_settings, sync_date)
+        elif active_platform == "tiktok":
+            sync_panel = render_tiktok_sync_panel(sync_settings, sync_date)
     account_link_modal = render_account_link_modal(
         active_platform,
         credential_rows,
