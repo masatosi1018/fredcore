@@ -837,6 +837,8 @@ def application(environ, start_response):
         ]
         _names_raw = form.get("selected_account_names", "").split("␞")
         selected_account_names = [n.strip() for n in _names_raw]
+        _mcc_raw = form.get("selected_account_mcc_ids", "").split(",")
+        selected_account_mcc_ids = [m.strip() for m in _mcc_raw]
         if selected_platform not in SUPPORTED_PLATFORMS:
             return render_accounts_response(
                 start_response,
@@ -889,7 +891,7 @@ def application(environ, start_response):
                         "account_name": (selected_account_names[i] if i < len(selected_account_names) else "").strip() or identifier,
                         "account_identifier": identifier,
                         "timezone_name": "Asia/Tokyo",
-                        "parent_account": "",
+                        "parent_account": selected_account_mcc_ids[i] if i < len(selected_account_mcc_ids) else "",
                     }
                     for i, identifier in enumerate(selected_account_ids)
                 ]

@@ -352,9 +352,11 @@ def sync_google_ads_campaigns_to_monthly_sheet(
             raise ConfigError("認証プロフィールが見つかりません。")
         access_token = _get_google_access_token(credential, config)
 
+        login_customer_id = str(account_row.get("parent_account") or "").replace("-", "").strip()
         client = google_ads_client_class(
             access_token=access_token,
             developer_token=config.google_ads_developer_token,
+            login_customer_id=login_customer_id,
         )
         records = client.fetch_account_daily_campaigns(
             customer_id=raw_customer_id,

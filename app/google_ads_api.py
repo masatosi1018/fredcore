@@ -163,6 +163,7 @@ class GoogleAdsClient:
                                     "account_id": child_id,
                                     "account_name": child_name,
                                     "status": child_status,
+                                    "mcc_id": customer_id,
                                 })
                     except GoogleAdsError:
                         # Fall back to showing the MCC itself if expansion fails

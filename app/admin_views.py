@@ -755,6 +755,7 @@ def render_account_link_modal(
               <input type="hidden" name="credential_profile_id" value="{escape(selected_credential_id)}" data-account-link-credential-input>
               <input type="hidden" name="selected_account_ids" value="" data-account-link-accounts-input>
               <input type="hidden" name="selected_account_names" value="" data-account-link-names-input>
+              <input type="hidden" name="selected_account_mcc_ids" value="" data-account-link-mcc-ids-input>
               <div class="account-link-step-header">
                 <h3>連携するアカウントを選択してください</h3>
                 <p>認証プロフィール <span data-selected-credential-name>未選択</span> を使って、広告アカウントを追加します。</p>
@@ -1219,6 +1220,7 @@ def render_account_link_modal_script() -> str:
       const credentialInput = modal.querySelector('[data-account-link-credential-input]');
       const accountsInput = modal.querySelector('[data-account-link-accounts-input]');
       const accountNamesInput = modal.querySelector('[data-account-link-names-input]');
+      const accountMccIdsInput = modal.querySelector('[data-account-link-mcc-ids-input]');
       const errorBox = modal.querySelector('[data-account-link-error]');
       const selectedCredentialName = modal.querySelector('[data-selected-credential-name]');
       const authContinueButton = modal.querySelector('[data-auth-continue-button]');
@@ -1268,6 +1270,7 @@ def render_account_link_modal_script() -> str:
         dynamicList.innerHTML = accounts.map((account) => {
           const accountId = String(account.account_id || '').trim();
           const accountName = String(account.account_name || accountId).trim();
+          const mccId = String(account.mcc_id || '').trim();
           const searchText = `${accountName} ${accountId}`.toLowerCase();
           const isLinked = !!account.is_linked;
           const status = String(account.status || 'ENABLED');
@@ -1277,7 +1280,7 @@ def render_account_link_modal_script() -> str:
           if (isSuspended) badges.push('<span class="badge gray">強制停止中</span>');
           return `
             <label class="account-choice-row" data-account-search="${escapeHtml(searchText)}">
-              <input type="checkbox" value="${escapeHtml(accountId)}" data-platform="${escapeHtml(selectedPlatform)}"${isLinked ? ' disabled' : ''}>
+              <input type="checkbox" value="${escapeHtml(accountId)}" data-platform="${escapeHtml(selectedPlatform)}" data-mcc-id="${escapeHtml(mccId)}"${isLinked ? ' disabled' : ''}>
               <div class="account-choice-main">
                 <div class="account-choice-title">${escapeHtml(accountName)}</div>
                 <div class="account-choice-meta">${escapeHtml(accountId)}</div>
@@ -1457,10 +1460,12 @@ def render_account_link_modal_script() -> str:
           const row = b.closest('.account-choice-row');
           return (row?.querySelector('.account-choice-title')?.textContent || '').trim();
         });
+        const selectedMccIds = checkedBoxes.map((b) => b.dataset.mccId || '');
         if (platformInput) platformInput.value = selectedPlatform;
         if (credentialInput) credentialInput.value = credential.value;
         if (accountsInput) accountsInput.value = selected.join(',');
         if (accountNamesInput) accountNamesInput.value = selectedNames.join('␞');
+        if (accountMccIdsInput) accountMccIdsInput.value = selectedMccIds.join(',');
       });
 
       updateView();
