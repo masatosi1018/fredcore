@@ -342,12 +342,12 @@ def render_users_page(rows, current_user: dict, *, notice: str = "", error: str 
             actions = '<span style="color:#9ca3af;font-size:13px">（自分）</span>'
         else:
             actions = f"""
-            <form method="post" action="/users/{row["id"]}/role" style="display:inline">
+            <form method="post" action="/users/{row["id"]}/role">
               <input type="hidden" name="role" value="{toggle_role}">
-              <button class="outlined slim" type="submit">{toggle_label}</button>
+              <button class="table-btn" type="submit">{toggle_label}</button>
             </form>
-            <form method="post" action="/users/{row["id"]}/delete" style="display:inline;margin-left:6px">
-              <button class="danger-link" type="submit">削除</button>
+            <form method="post" action="/users/{row["id"]}/delete">
+              <button class="table-btn danger" type="submit">削除</button>
             </form>
             """
         table_rows.append(f"""
