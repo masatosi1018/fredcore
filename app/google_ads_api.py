@@ -9,7 +9,7 @@ import requests
 from app.models import CampaignPerformanceRecord
 
 
-GOOGLE_ADS_API_VERSION = "v18"
+GOOGLE_ADS_API_VERSION = "v21"
 GOOGLE_ADS_BASE_URL = f"https://googleads.googleapis.com/{GOOGLE_ADS_API_VERSION}"
 
 _CAMPAIGN_QUERY = (
