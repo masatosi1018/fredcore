@@ -70,8 +70,10 @@ class GoogleAdsClient:
             try:
                 error_body = response.json()
             except ValueError:
+                import re as _re
+                plain = _re.sub(r"<[^>]+>", "", response.text).strip()[:200]
                 raise GoogleAdsError(
-                    f"Google Ads API error ({response.status_code}): {response.text[:400]}"
+                    f"Google Ads API error ({response.status_code}): {plain or response.text[:200]}"
                 )
             error_detail = error_body.get("error", {})
             if isinstance(error_detail, dict):
@@ -91,8 +93,11 @@ class GoogleAdsClient:
             try:
                 error_body = response.json()
             except ValueError:
+                # HTML response — strip tags for a readable message
+                import re as _re
+                plain = _re.sub(r"<[^>]+>", "", response.text).strip()[:200]
                 raise GoogleAdsError(
-                    f"Google Ads API error ({response.status_code}): {response.text[:400]}"
+                    f"Google Ads API error ({response.status_code}): {plain or response.text[:200]}"
                 )
             error_detail = error_body.get("error", {})
             message = (

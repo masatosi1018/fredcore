@@ -1651,14 +1651,43 @@ def application(environ, start_response):
             return json_response({"error": "認証情報が見つかりません"}, "404 Not Found")
         linked_ids = {row["account_identifier"] for row in REPOSITORY.list_accounts(platform)}
         if platform == "google":
-            from app.campaign_sync import MonthlyCampaignSyncConfig, _get_google_access_token
             from app.google_ads_api import GoogleAdsClient, GoogleAdsError
+            from app.meta_sync import merged_integration_settings
+            from app.oauth_clients import OAuthAppConfig, refresh_google_access_token
             try:
-                cfg = MonthlyCampaignSyncConfig.from_mapping(get_config(), project_root=PROJECT_ROOT)
-                access_token = _get_google_access_token(credential, cfg)
+                merged = merged_integration_settings(get_config())
+                developer_token = merged.get("google_ads_developer_token", "").strip()
+                if not developer_token:
+                    return json_response(
+                        {"error": "GOOGLE_ADS_DEVELOPER_TOKEN が設定されていません。Vercel の環境変数に追加してください。"},
+                        "500 Internal Server Error",
+                    )
+                oauth_client_id = merged.get("google_oauth_client_id", "").strip()
+                oauth_client_secret = merged.get("google_oauth_client_secret", "").strip()
+                if not oauth_client_id or not oauth_client_secret:
+                    return json_response(
+                        {"error": "Google OAuth クライアントID / シークレットを設定してください。"},
+                        "500 Internal Server Error",
+                    )
+                refresh_token = str(credential.get("refresh_token") or "").strip()
+                if not refresh_token:
+                    return json_response(
+                        {"error": "Google リフレッシュトークンがありません。Google 認証をやり直してください。"},
+                        "400 Bad Request",
+                    )
+                oauth_cfg = OAuthAppConfig(
+                    platform="google",
+                    client_id=oauth_client_id,
+                    client_secret=oauth_client_secret,
+                    authorization_url="https://accounts.google.com/o/oauth2/v2/auth",
+                    token_url="https://oauth2.googleapis.com/token",
+                    redirect_uri="",
+                    scopes=(),
+                )
+                token = refresh_google_access_token(oauth_cfg, refresh_token)
                 client = GoogleAdsClient(
-                    access_token=access_token,
-                    developer_token=cfg.google_ads_developer_token,
+                    access_token=token.access_token,
+                    developer_token=developer_token,
                 )
                 accounts = client.list_accessible_customers()
                 return json_response({
@@ -1667,7 +1696,7 @@ def application(environ, start_response):
                         for a in accounts
                     ]
                 })
-            except Exception as exc:
+            except (GoogleAdsError, Exception) as exc:
                 return json_response({"error": str(exc)}, "500 Internal Server Error")
         if platform == "meta":
             from app.meta_api import MetaClient
