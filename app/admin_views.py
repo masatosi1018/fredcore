@@ -117,6 +117,7 @@ NAV_ITEMS = [
     ("認証情報一覧", "/credentials", "key"),
     ("月別スプシ", "/report-sheets", "table"),
     ("同期履歴", "/sync-runs", "clock"),
+    ("ユーザー管理", "/users", "gear"),
 ]
 
 NAV_ICON_CLASSES = {
@@ -150,9 +151,12 @@ RULE_STATUS_OPTIONS = (
 )
 
 
-def render_layout(title: str, body: str, current_path: str) -> bytes:
+def render_layout(title: str, body: str, current_path: str, current_user: Optional[dict] = None) -> bytes:
     nav_html = []
+    is_admin = (current_user or {}).get("role") == "admin"
     for label, href, icon in NAV_ITEMS:
+        if href == "/users" and not is_admin:
+            continue
         active = "active" if current_path.startswith(href) else ""
         nav_html.append(
             f'<a class="nav-item {active}" href="{href}">'
@@ -160,6 +164,24 @@ def render_layout(title: str, body: str, current_path: str) -> bytes:
             f"<span>{escape(label)}</span>"
             "</a>"
         )
+
+    user_name = (current_user or {}).get("name", "")
+    user_email = (current_user or {}).get("email", "")
+    user_initial = (user_name or user_email or "?")[0].upper()
+    user_html = f"""
+      <div class="sidebar-user">
+        <div class="avatar">{escape(user_initial)}</div>
+        <div>
+          <div class="user-name">{escape(user_name or user_email)}</div>
+          <div class="user-sub">{escape(user_email)}</div>
+        </div>
+        <form method="post" action="/logout" style="margin-left:auto">
+          <button class="logout-btn" type="submit" title="ログアウト">
+            <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+          </button>
+        </form>
+      </div>
+    """ if current_user else ""
 
     html = f"""<!DOCTYPE html>
 <html lang="ja">
@@ -179,13 +201,7 @@ def render_layout(title: str, body: str, current_path: str) -> bytes:
       <nav class="sidebar-nav">
         {''.join(nav_html)}
       </nav>
-      <div class="sidebar-user">
-        <div class="avatar"></div>
-        <div>
-          <div class="user-name">daiki.sakai@fred-…</div>
-          <div class="user-sub">daiki.sakai@fred-japan.co.jp</div>
-        </div>
-      </div>
+      {user_html}
     </aside>
     <main class="content">
       {body}
@@ -194,6 +210,162 @@ def render_layout(title: str, body: str, current_path: str) -> bytes:
 </body>
 </html>"""
     return html.encode("utf-8")
+
+
+def render_auth_page(title: str, body: str) -> bytes:
+    """ログイン・セットアップ用のシンプルなレイアウト（サイドバーなし）"""
+    html = f"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FredCore | {escape(title)}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="auth-shell">
+    <div class="auth-card">
+      <div class="auth-brand">FredCore</div>
+      {body}
+    </div>
+  </div>
+</body>
+</html>"""
+    return html.encode("utf-8")
+
+
+def render_login_page(*, error: str = "", next_url: str = "") -> bytes:
+    next_input = f'<input type="hidden" name="next" value="{escape(next_url)}">' if next_url else ""
+    error_html = f'<div class="feedback feedback-error">{escape(error)}</div>' if error else ""
+    body = f"""
+    <h1 class="auth-title">ログイン</h1>
+    {error_html}
+    <form method="post" action="/login" class="auth-form">
+      {next_input}
+      <label>メールアドレス
+        <input type="email" name="email" autocomplete="email" required autofocus>
+      </label>
+      <label>パスワード
+        <input type="password" name="password" autocomplete="current-password" required>
+      </label>
+      <button class="primary-btn" type="submit">ログイン</button>
+    </form>
+    """
+    return render_auth_page("ログイン", body)
+
+
+def render_setup_page(*, error: str = "") -> bytes:
+    error_html = f'<div class="feedback feedback-error">{escape(error)}</div>' if error else ""
+    body = f"""
+    <h1 class="auth-title">初回セットアップ</h1>
+    <p class="auth-desc">最初の管理者アカウントを作成します。</p>
+    {error_html}
+    <form method="post" action="/setup" class="auth-form">
+      <label>名前
+        <input type="text" name="name" required autofocus>
+      </label>
+      <label>メールアドレス
+        <input type="email" name="email" required>
+      </label>
+      <label>パスワード（8文字以上）
+        <input type="password" name="password" minlength="8" required>
+      </label>
+      <button class="primary-btn" type="submit">管理者アカウントを作成</button>
+    </form>
+    """
+    return render_auth_page("初回セットアップ", body)
+
+
+def render_users_page(rows, current_user: dict, *, notice: str = "", error: str = "") -> bytes:
+    header = """
+    <section class="page-head">
+      <div>
+        <h1>ユーザー管理</h1>
+        <p>このアプリにアクセスできるユーザーを管理します。管理者のみ操作できます。</p>
+      </div>
+      <a class="primary-btn" href="/users/new">新しいユーザーを追加</a>
+    </section>
+    """
+    table_rows = []
+    for row in rows:
+        role_label = "管理者" if row["role"] == "admin" else "メンバー"
+        role_class = "green" if row["role"] == "admin" else "gray"
+        is_self = row["email"] == current_user.get("email")
+        delete_btn = (
+            '<span style="color:#9ca3af;font-size:13px">（自分）</span>'
+            if is_self
+            else f"""
+            <form method="post" action="/users/{row["id"]}/delete">
+              <button class="danger-link" type="submit">削除</button>
+            </form>
+            """
+        )
+        table_rows.append(f"""
+        <tr>
+          <td>{escape(row["name"])}</td>
+          <td>{escape(row["email"])}</td>
+          <td><span class="badge {role_class}">{role_label}</span></td>
+          <td>{escape(row["created_at"][:10] if row["created_at"] else "")}</td>
+          <td class="action-cell">{delete_btn}</td>
+        </tr>
+        """)
+    body = f"""
+    {header}
+    {render_feedback(notice, error)}
+    <section class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>名前</th>
+              <th>メールアドレス</th>
+              <th>役割</th>
+              <th>作成日</th>
+              <th>アクション</th>
+            </tr>
+          </thead>
+          <tbody>{''.join(table_rows)}</tbody>
+        </table>
+      </div>
+    </section>
+    """
+    return render_layout("ユーザー管理", body, "/users", current_user)
+
+
+def render_new_user_page(current_user: dict, *, error: str = "") -> bytes:
+    error_html = f'<div class="feedback feedback-error">{escape(error)}</div>' if error else ""
+    body = f"""
+    <section class="page-head">
+      <div>
+        <h1>ユーザーを追加</h1>
+      </div>
+    </section>
+    {error_html}
+    <section class="card" style="max-width:480px">
+      <form method="post" action="/users/new" class="stack-form">
+        <label>名前
+          <input type="text" name="name" required autofocus>
+        </label>
+        <label>メールアドレス
+          <input type="email" name="email" required>
+        </label>
+        <label>パスワード（8文字以上）
+          <input type="password" name="password" minlength="8" required>
+        </label>
+        <label>役割
+          <select name="role">
+            <option value="member">メンバー</option>
+            <option value="admin">管理者</option>
+          </select>
+        </label>
+        <div style="display:flex;gap:12px;margin-top:8px">
+          <button class="primary-btn" type="submit">作成</button>
+          <a class="secondary-btn" href="/users">キャンセル</a>
+        </div>
+      </form>
+    </section>
+    """
+    return render_layout("ユーザーを追加", body, "/users", current_user)
 
 
 def render_feedback(notice: str = "", error: str = "") -> str:
@@ -693,7 +865,7 @@ def render_credential_link_modal(
                   <input type="text" name="profile_identifier" value="{escape(modal_state.get('profile_identifier', ''))}" placeholder="メールアドレスや管理ID" data-credential-profile-identifier>
                 </label>
                 <label>作成者メール
-                  <input type="email" name="creator_email" value="{escape(modal_state.get('creator_email', 'daiki.sakai@fred-japan.co.jp'))}" required>
+                  <input type="email" name="creator_email" value="{escape(modal_state.get('creator_email', ''))}" required>
                 </label>
                 <label>認証期限
                   <input type="text" name="auth_expiry" value="{escape(modal_state.get('auth_expiry', ''))}" placeholder="2026-05-31 12:00">
@@ -1352,6 +1524,7 @@ def render_rules_page(
     *,
     notice: str = "",
     error: str = "",
+    current_user: Optional[dict] = None,
 ) -> bytes:
     header = """
     <section class="page-head">
@@ -1424,7 +1597,7 @@ def render_rules_page(
       </div>
     </section>
     """
-    return render_layout("自動運用ルール", body, "/rules")
+    return render_layout("自動運用ルール", body, "/rules", current_user)
 
 
 def render_rule_form(
@@ -1438,7 +1611,7 @@ def render_rule_form(
     operator = (values.get("condition_operator") or ">=").strip() or ">="
     action_type = (values.get("action_type") or "通知").strip() or "通知"
     status = (values.get("status") or "有効").strip() or "有効"
-    owner_email = (values.get("owner_email") or "daiki.sakai@fred-japan.co.jp").strip()
+    owner_email = (values.get("owner_email") or "").strip()
     error_html = f'<p class="form-error">{escape(error)}</p>' if error else ""
     body = f"""
     <section class="page-head compact">
@@ -1515,6 +1688,7 @@ def render_accounts_page(
     credential_rows=(),
     linked_account_rows=(),
     account_link_modal_state: Optional[dict] = None,
+    current_user: Optional[dict] = None,
 ) -> bytes:
     header = """
     <section class="page-head">
@@ -1587,7 +1761,7 @@ def render_accounts_page(
     {account_link_modal}
     {render_account_link_modal_script()}
     """
-    return render_layout("アカウント連携", body, "/accounts")
+    return render_layout("アカウント連携", body, "/accounts", current_user)
 
 
 def render_credentials_page(
@@ -1599,6 +1773,7 @@ def render_credentials_page(
     notice: str = "",
     error: str = "",
     credential_modal_state: Optional[dict] = None,
+    current_user: Optional[dict] = None,
 ) -> bytes:
     header = """
     <section class="page-head">
@@ -1659,7 +1834,7 @@ def render_credentials_page(
     {render_credential_link_modal(active_platform, credential_modal_state)}
     {render_credential_modal_script()}
     """
-    return render_layout("認証情報一覧", body, "/credentials")
+    return render_layout("認証情報一覧", body, "/credentials", current_user)
 
 
 def render_account_form(
@@ -1709,7 +1884,7 @@ def render_account_form(
           </select>
         </label>
         <label>操作担当者
-          <input type="email" name="operator_email" value="{escape(values.get('operator_email', 'daiki.sakai@fred-japan.co.jp'))}" required>
+          <input type="email" name="operator_email" value="{escape(values.get('operator_email', ''))}" required>
         </label>
         <label>親アカウント
           <input type="text" name="parent_account" value="{escape(values.get('parent_account', '-'))}">
@@ -1749,7 +1924,7 @@ def render_credential_form(active_platform: str, error: str = "") -> bytes:
           <input type="text" name="profile_identifier" required>
         </label>
         <label>作成者メール
-          <input type="email" name="creator_email" value="daiki.sakai@fred-japan.co.jp" required>
+          <input type="email" name="creator_email" value="" required>
         </label>
         <label>認証期限
           <input type="text" name="auth_expiry" placeholder="2026-05-31 12:00">
@@ -1771,6 +1946,7 @@ def render_report_sheets_page(
     error: str = "",
     settings=None,
     default_month_key: str = "",
+    current_user: Optional[dict] = None,
 ) -> bytes:
     header = """
     <section class="page-head">
@@ -1818,7 +1994,7 @@ def render_report_sheets_page(
       </div>
     </section>
     """
-    return render_layout("月別スプレッドシート", body, "/report-sheets")
+    return render_layout("月別スプレッドシート", body, "/report-sheets", current_user)
 
 
 def render_report_sheet_form(
@@ -1872,7 +2048,7 @@ def render_report_sheet_form(
     return render_layout("月別スプシを追加", body, "/report-sheets")
 
 
-def render_sync_runs_page(rows, *, notice: str = "", error: str = "") -> bytes:
+def render_sync_runs_page(rows, *, notice: str = "", error: str = "", current_user: Optional[dict] = None) -> bytes:
     header = """
     <section class="page-head">
       <div>
@@ -1931,7 +2107,7 @@ def render_sync_runs_page(rows, *, notice: str = "", error: str = "") -> bytes:
       </div>
     </section>
     """
-    return render_layout("同期履歴", body, "/sync-runs")
+    return render_layout("同期履歴", body, "/sync-runs", current_user)
 
 
 def render_placeholder_page(title: str, description: str, current_path: str) -> bytes:

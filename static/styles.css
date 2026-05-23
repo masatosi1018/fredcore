@@ -104,6 +104,28 @@ select {
   height: 34px;
   border-radius: 50%;
   background: linear-gradient(135deg, #7c3aed, #60a5fa);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.logout-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #9ca3af;
+  font-size: 18px;
+  padding: 2px 4px;
+  line-height: 1;
+  border-radius: 6px;
+  transition: color 0.15s;
+}
+.logout-btn:hover {
+  color: #ef4444;
 }
 
 .user-name {
@@ -293,7 +315,7 @@ input[type="url"] {
 
 .sync-panel {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   padding: 22px 24px;
@@ -1029,4 +1051,117 @@ body.modal-open {
   .account-choice-side {
     align-items: flex-start;
   }
+}
+
+/* ── 認証画面 ─────────────────────────────────────────────────────────── */
+.auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f7fb;
+}
+
+.auth-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  padding: 40px 44px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 4px 24px rgba(0,0,0,.06);
+}
+
+.auth-brand {
+  font-size: 22px;
+  font-weight: 800;
+  color: #7c3aed;
+  margin-bottom: 28px;
+}
+
+.auth-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 20px;
+}
+
+.auth-desc {
+  color: #6b7280;
+  margin: -12px 0 20px;
+  font-size: 14px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.auth-form input {
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  font-size: 15px;
+  outline: none;
+  transition: border-color .15s;
+}
+
+.auth-form input:focus {
+  border-color: #7c3aed;
+}
+
+.auth-form .primary-btn {
+  margin-top: 4px;
+}
+
+/* ── スタックフォーム（ユーザー追加など）────────────────────────────── */
+.stack-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+}
+
+.stack-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.stack-form input,
+.stack-form select {
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  font-size: 15px;
+}
+
+.secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.badge.gray {
+  background: #f3f4f6;
+  color: #6b7280;
 }

@@ -38,11 +38,24 @@ from app.oauth_clients import (
     tiktok_oauth_config,
 )
 from app.sync_jobs import run_google_ads_monthly_sync_job, run_meta_monthly_sync_job, run_tiktok_monthly_sync_job
+from app.auth import (
+    clear_session_cookie,
+    generate_session_token,
+    get_session_cookie,
+    hash_password,
+    make_session_cookie,
+    session_expires_at,
+    verify_password,
+)
 from app.admin_views import (
     render_accounts_page,
     render_credentials_page,
+    render_login_page,
+    render_new_user_page,
     render_report_sheets_page,
+    render_setup_page,
     render_sync_runs_page,
+    render_users_page,
 )
 
 
@@ -84,6 +97,32 @@ def ensure_repository_ready() -> None:
         return
     REPOSITORY.initialize()
     _REPOSITORY_READY = True
+
+
+_PUBLIC_PATHS = frozenset({"/login", "/setup"})
+_PUBLIC_PREFIXES = ("/static/", "/oauth/", "/jobs/")
+
+
+def get_current_user(environ) -> Optional[Dict]:
+    token = get_session_cookie(environ)
+    if not token:
+        return None
+    row = REPOSITORY.get_user_session(token)
+    if row is None:
+        return None
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    if str(row["expires_at"]) < now:
+        REPOSITORY.delete_user_session(token)
+        return None
+    if str(row.get("status", "有効")) != "有効":
+        return None
+    return {
+        "id": row["user_id"],
+        "email": str(row["email"]),
+        "name": str(row["name"]),
+        "role": str(row["role"]),
+    }
 
 
 def parse_form(environ) -> dict:
@@ -262,6 +301,7 @@ def render_accounts_response(
     error: str = "",
     status: str = "200 OK",
     modal_state: Optional[dict] = None,
+    current_user: Optional[Dict] = None,
 ):
     integration_settings = get_config()
     sync_date = report_date or default_target_date(
@@ -279,6 +319,7 @@ def render_accounts_response(
         credential_rows=REPOSITORY.list_credentials(None),
         linked_account_rows=REPOSITORY.list_accounts(None),
         account_link_modal_state=modal_state,
+        current_user=current_user,
     )
     return respond_html(start_response, body, status)
 
@@ -292,6 +333,7 @@ def render_credentials_response(
     error: str = "",
     status: str = "200 OK",
     modal_state: Optional[dict] = None,
+    current_user: Optional[Dict] = None,
 ):
     body = render_credentials_page(
         REPOSITORY.list_credentials(platform, query),
@@ -301,6 +343,7 @@ def render_credentials_response(
         notice=notice,
         error=error,
         credential_modal_state=modal_state,
+        current_user=current_user,
     )
     return respond_html(start_response, body, status)
 
@@ -523,6 +566,81 @@ def application(environ, start_response):
     if path.startswith("/static/"):
         return serve_static(path, start_response)
 
+    # ── /setup: 初回セットアップ（ユーザーが0人のときだけ表示）──────────
+    if path == "/setup":
+        if REPOSITORY.count_users() > 0:
+            return redirect(start_response, "/login")
+        if method == "POST":
+            form = parse_form(environ)
+            name = form.get("name", "").strip()
+            email = form.get("email", "").strip()
+            password = form.get("password", "").strip()
+            if not name or not email or not password:
+                return respond_html(start_response, render_setup_page(error="すべての項目を入力してください。"))
+            if len(password) < 8:
+                return respond_html(start_response, render_setup_page(error="パスワードは8文字以上で入力してください。"))
+            try:
+                REPOSITORY.create_user(
+                    email=email,
+                    name=name,
+                    password_hash=hash_password(password),
+                    role="admin",
+                )
+            except Exception as exc:
+                return respond_html(start_response, render_setup_page(error=str(exc)))
+            return redirect(start_response, "/login")
+        return respond_html(start_response, render_setup_page())
+
+    # ── /login ─────────────────────────────────────────────────────────────
+    if path == "/login":
+        if REPOSITORY.count_users() == 0:
+            return redirect(start_response, "/setup")
+        if method == "POST":
+            form = parse_form(environ)
+            email = form.get("email", "").strip()
+            password = form.get("password", "").strip()
+            user = REPOSITORY.get_user_by_email(email)
+            if user and verify_password(str(user["password_hash"]), password):
+                token = generate_session_token()
+                expires = session_expires_at()
+                REPOSITORY.create_user_session(token, int(user["id"]), expires)
+                next_url = form.get("next", "").strip() or "/accounts"
+                body = b""
+                start_response("302 Found", [
+                    ("Location", next_url),
+                    ("Set-Cookie", make_session_cookie(token)),
+                    ("Content-Length", "0"),
+                ])
+                return [body]
+            return respond_html(
+                start_response,
+                render_login_page(error="メールアドレスまたはパスワードが正しくありません。"),
+                "401 Unauthorized",
+            )
+        return respond_html(start_response, render_login_page())
+
+    # ── /logout ────────────────────────────────────────────────────────────
+    if path == "/logout" and method == "POST":
+        token = get_session_cookie(environ)
+        if token:
+            REPOSITORY.delete_user_session(token)
+        start_response("302 Found", [
+            ("Location", "/login"),
+            ("Set-Cookie", clear_session_cookie()),
+            ("Content-Length", "0"),
+        ])
+        return [b""]
+
+    # ── 認証チェック ────────────────────────────────────────────────────────
+    is_public = path in _PUBLIC_PATHS or any(path.startswith(p) for p in _PUBLIC_PREFIXES)
+    current_user = None
+    if not is_public:
+        if REPOSITORY.count_users() == 0:
+            return redirect(start_response, "/setup")
+        current_user = get_current_user(environ)
+        if current_user is None:
+            return redirect(start_response, f"/login?next={path}")
+
     if path == "/":
         return redirect(start_response, f"/accounts?platform={platform}")
 
@@ -591,6 +709,7 @@ def application(environ, start_response):
             report_date=query_param(environ, "report_date", ""),
             notice=notice,
             error=error,
+            current_user=current_user,
         )
 
     if path == "/credentials" and method == "GET":
@@ -600,6 +719,7 @@ def application(environ, start_response):
             query=query,
             notice=notice,
             error=error,
+            current_user=current_user,
         )
 
     if path == "/report-sheets" and method == "GET":
@@ -607,6 +727,7 @@ def application(environ, start_response):
             REPOSITORY.list_monthly_report_sheets(),
             notice=notice,
             error=error,
+            current_user=current_user,
         )
         return respond_html(start_response, body)
 
@@ -615,6 +736,7 @@ def application(environ, start_response):
             REPOSITORY.list_sync_runs(),
             notice=notice,
             error=error,
+            current_user=current_user,
         )
         return respond_html(start_response, body)
 
@@ -1518,6 +1640,69 @@ def application(environ, start_response):
             except Exception as exc:
                 return json_response({"error": str(exc)}, "500 Internal Server Error")
         return json_response({"error": "このプラットフォームは未対応です"}, "400 Bad Request")
+
+    # ── ユーザー管理（管理者のみ）────────────────────────────────────────
+    if path == "/users" and method == "GET":
+        if current_user.get("role") != "admin":
+            return redirect_to(start_response, "/accounts")
+        body = render_users_page(
+            REPOSITORY.list_users(),
+            current_user,
+            notice=notice,
+            error=error,
+        )
+        return respond_html(start_response, body)
+
+    if path == "/users/new" and method == "GET":
+        if current_user.get("role") != "admin":
+            return redirect_to(start_response, "/accounts")
+        return respond_html(start_response, render_new_user_page(current_user))
+
+    if path == "/users/new" and method == "POST":
+        if current_user.get("role") != "admin":
+            return redirect_to(start_response, "/accounts")
+        form = parse_form(environ)
+        name = form.get("name", "").strip()
+        email = form.get("email", "").strip()
+        password = form.get("password", "").strip()
+        role = form.get("role", "member").strip()
+        if not name or not email or not password:
+            return respond_html(
+                start_response,
+                render_new_user_page(current_user, error="すべての項目を入力してください。"),
+                "400 Bad Request",
+            )
+        if len(password) < 8:
+            return respond_html(
+                start_response,
+                render_new_user_page(current_user, error="パスワードは8文字以上で入力してください。"),
+                "400 Bad Request",
+            )
+        try:
+            REPOSITORY.create_user(
+                email=email,
+                name=name,
+                password_hash=hash_password(password),
+                role=role if role in ("admin", "member") else "member",
+            )
+        except Exception as exc:
+            return respond_html(
+                start_response,
+                render_new_user_page(current_user, error=str(exc)),
+                "400 Bad Request",
+            )
+        return redirect_to(start_response, "/users", notice=f"{name} を追加しました。")
+
+    if re.match(r"^/users/\d+/delete$", path) and method == "POST":
+        if current_user.get("role") != "admin":
+            return redirect_to(start_response, "/accounts")
+        user_id = int(path.split("/")[2])
+        target = REPOSITORY.get_user_by_id(user_id)
+        if target and target["email"] == current_user.get("email"):
+            return redirect_to(start_response, "/users", error="自分自身は削除できません。")
+        if target:
+            REPOSITORY.delete_user(user_id)
+        return redirect_to(start_response, "/users", notice="ユーザーを削除しました。")
 
     return respond_html(start_response, b"Not Found", "404 Not Found")
 

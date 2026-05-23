@@ -307,6 +307,26 @@ class AdminRepository:
             )
             """,
             f"""
+            CREATE TABLE IF NOT EXISTS users (
+                id {id_column},
+                email TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'member',
+                status TEXT NOT NULL DEFAULT '有効',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                token TEXT PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """,
+            f"""
             CREATE TABLE IF NOT EXISTS sync_runs (
                 id {id_column},
                 job_name TEXT NOT NULL,
@@ -871,6 +891,93 @@ class AdminRepository:
                 "DELETE FROM monthly_report_sheets WHERE id = ?",
                 (sheet_id,),
             )
+
+    # ── User management ────────────────────────────────────────────────────
+
+    def count_users(self) -> int:
+        with self.connect() as connection:
+            row = connection.execute("SELECT COUNT(*) AS n FROM users").fetchone()
+        return int(row["n"])
+
+    def create_user(
+        self,
+        *,
+        email: str,
+        name: str,
+        password_hash: str,
+        role: str = "member",
+    ) -> None:
+        now = utc_now()
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO users (email, name, password_hash, role, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, '有効', ?, ?)
+                """,
+                (email.strip(), name.strip(), password_hash, role, now, now),
+            )
+
+    def list_users(self) -> List[sqlite3.Row]:
+        with self.connect() as connection:
+            return connection.execute(
+                "SELECT * FROM users ORDER BY created_at ASC"
+            ).fetchall()
+
+    def get_user_by_email(self, email: str) -> Optional[sqlite3.Row]:
+        with self.connect() as connection:
+            return connection.execute(
+                "SELECT * FROM users WHERE email = ?",
+                (email.strip(),),
+            ).fetchone()
+
+    def get_user_by_id(self, user_id: int) -> Optional[sqlite3.Row]:
+        with self.connect() as connection:
+            return connection.execute(
+                "SELECT * FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+
+    def update_user_password(self, user_id: int, password_hash: str) -> None:
+        now = utc_now()
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+                (password_hash, now, user_id),
+            )
+
+    def delete_user(self, user_id: int) -> None:
+        with self.connect() as connection:
+            connection.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))
+            connection.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+    # ── Session management ─────────────────────────────────────────────────
+
+    def create_user_session(self, token: str, user_id: int, expires_at: str) -> None:
+        now = utc_now()
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO user_sessions (token, user_id, expires_at, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (token, user_id, expires_at, now),
+            )
+
+    def get_user_session(self, token: str) -> Optional[sqlite3.Row]:
+        with self.connect() as connection:
+            return connection.execute(
+                """
+                SELECT user_sessions.*, users.email, users.name, users.role, users.status
+                FROM user_sessions
+                JOIN users ON user_sessions.user_id = users.id
+                WHERE user_sessions.token = ?
+                """,
+                (token,),
+            ).fetchone()
+
+    def delete_user_session(self, token: str) -> None:
+        with self.connect() as connection:
+            connection.execute("DELETE FROM user_sessions WHERE token = ?", (token,))
 
     def create_sync_run(
         self,
