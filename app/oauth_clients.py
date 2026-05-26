@@ -421,11 +421,18 @@ def fetch_tiktok_profile(
         message = body.get("message") or str(body)
         raise OAuthError(f"TikTok profile fetch error [{code}]: {message}")
     data = body.get("data", {})
-    user_id = str(data.get("user_id") or "").strip()
-    username = str(data.get("username") or data.get("display_name") or user_id).strip()
+    # TikTok Business API returns advertiser_id or open_id depending on app type
+    user_id = str(
+        data.get("user_id") or data.get("advertiser_id") or data.get("open_id") or ""
+    ).strip()
+    username = str(
+        data.get("display_name") or data.get("username") or data.get("advertiser_name") or user_id
+    ).strip()
     email = str(data.get("email") or username).strip()
     if not user_id:
-        raise OAuthError("TikTok ユーザー情報の取得に失敗しました。")
+        raise OAuthError(
+            f"TikTok ユーザー情報の取得に失敗しました。(レスポンス: {list(data.keys())})"
+        )
     return OAuthProfile(
         external_user_id=user_id,
         profile_name=username,
