@@ -76,38 +76,12 @@ class TikTokAdsClient:
             raise TikTokAdsError(f"TikTok API error [{code}]: {message}")
         return body.get("data", {})
 
-    def _fetch_campaign_names(self, advertiser_id: str) -> Dict[str, str]:
-        """Returns {campaign_id: campaign_name} for the advertiser."""
-        name_map: Dict[str, str] = {}
-        page = 1
-        while True:
-            data = self._get(
-                "/campaign/get/",
-                {
-                    "advertiser_id": advertiser_id,
-                    "fields": json.dumps(["campaign_id", "campaign_name"]),
-                    "page": page,
-                    "page_size": 1000,
-                },
-            )
-            for row in data.get("list", []):
-                cid = str(row.get("campaign_id") or "")
-                cname = str(row.get("campaign_name") or cid)
-                if cid:
-                    name_map[cid] = cname
-            page_info = data.get("page_info", {})
-            if page >= int(page_info.get("total_page", 1) or 1):
-                break
-            page += 1
-        return name_map
-
     def fetch_account_daily_campaigns(
         self,
         advertiser_id: str,
         report_date: str,
         advertiser_name: str = "",
     ) -> List[CampaignPerformanceRecord]:
-        campaign_names = self._fetch_campaign_names(advertiser_id)
         display_name = advertiser_name or advertiser_id
         fetched_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         records: List[CampaignPerformanceRecord] = []
@@ -119,7 +93,7 @@ class TikTokAdsClient:
                     "advertiser_id": advertiser_id,
                     "report_type": "BASIC",
                     "data_level": "AUCTION_CAMPAIGN",
-                    "dimensions": json.dumps(["campaign_id", "stat_time_day"]),
+                    "dimensions": json.dumps(["campaign_id", "campaign_name", "stat_time_day"]),
                     "metrics": json.dumps(["spend", "impressions", "clicks", "conversion"]),
                     "start_date": report_date,
                     "end_date": report_date,
@@ -131,7 +105,7 @@ class TikTokAdsClient:
                 dims = row.get("dimensions", {})
                 metrics = row.get("metrics", {})
                 campaign_id = str(dims.get("campaign_id") or "")
-                campaign_name = campaign_names.get(campaign_id, campaign_id)
+                campaign_name = str(dims.get("campaign_name") or campaign_id)
                 spend = Decimal(str(metrics.get("spend", "0") or "0"))
                 records.append(
                     CampaignPerformanceRecord(
