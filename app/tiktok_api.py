@@ -32,6 +32,7 @@ class TikTokAdsClient:
         """Return all advertiser accounts accessible to the authenticated user."""
         response = self.session.get(
             f"{TIKTOK_API_BASE_URL}/oauth2/advertiser/get/",
+            headers=self._headers(),
             params={
                 "app_id": self.app_id,
                 "secret": self.secret,
