@@ -423,7 +423,7 @@ def fetch_tiktok_profile(
     data = body.get("data", {})
     # TikTok Business API returns advertiser_id or open_id depending on app type
     user_id = str(
-        data.get("user_id") or data.get("advertiser_id") or data.get("open_id") or ""
+        data.get("core_user_id") or data.get("user_id") or data.get("advertiser_id") or data.get("open_id") or ""
     ).strip()
     username = str(
         data.get("display_name") or data.get("username") or data.get("advertiser_name") or user_id
