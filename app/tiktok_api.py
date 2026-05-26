@@ -93,7 +93,7 @@ class TikTokAdsClient:
                     "advertiser_id": advertiser_id,
                     "report_type": "BASIC",
                     "data_level": "AUCTION_CAMPAIGN",
-                    "dimensions": json.dumps(["campaign_id", "campaign_name", "stat_time_day"]),
+                    "dimensions": json.dumps(["campaign_id", "stat_time_day"]),
                     "metrics": json.dumps(["spend", "impressions", "clicks", "conversion"]),
                     "start_date": report_date,
                     "end_date": report_date,
@@ -105,7 +105,7 @@ class TikTokAdsClient:
                 dims = row.get("dimensions", {})
                 metrics = row.get("metrics", {})
                 campaign_id = str(dims.get("campaign_id") or "")
-                campaign_name = str(dims.get("campaign_name") or campaign_id)
+                campaign_name = campaign_id
                 spend = Decimal(str(metrics.get("spend", "0") or "0"))
                 records.append(
                     CampaignPerformanceRecord(
