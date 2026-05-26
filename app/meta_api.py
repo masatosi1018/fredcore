@@ -46,7 +46,7 @@ class MetaClient:
             },
         )
 
-        fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         rows = insights.get("data", [])
         records: List[CampaignPerformanceRecord] = []
         for row in rows:

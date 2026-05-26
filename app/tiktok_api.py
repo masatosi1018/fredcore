@@ -83,7 +83,7 @@ class TikTokAdsClient:
         advertiser_name: str = "",
     ) -> List[CampaignPerformanceRecord]:
         display_name = advertiser_name or advertiser_id
-        fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         records: List[CampaignPerformanceRecord] = []
         page = 1
         while True:
