@@ -42,7 +42,7 @@ def build_campaign_report_row(record: CampaignPerformanceRecord) -> List[str]:
         str(record.impressions),
         str(record.clicks),
         decimal_to_sheet_value(record.conversions),
-        record.fetched_at[:10],
+        record.fetched_at,
     ]
 
 

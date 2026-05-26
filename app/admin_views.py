@@ -8,6 +8,8 @@ from app.admin_db import DEFAULT_PLATFORM, SUPPORTED_PLATFORMS
 from app.account_linking import ACCOUNT_LINK_FLOW
 from app.meta_sync import merged_integration_settings
 
+SUPER_ADMIN_EMAIL = "yusuke.chiba@fred-japan.co.jp"
+
 
 def _fmt_date(value: str) -> str:
     """ISO 日付 → YYYY/MM/DD"""
@@ -339,6 +341,7 @@ def render_users_page(rows, current_user: dict, *, notice: str = "", error: str 
       <a class="primary-btn" href="/users/new">新しいユーザーを追加</a>
     </section>
     """
+    is_super_admin = current_user.get("email") == SUPER_ADMIN_EMAIL
     table_rows = []
     for row in rows:
         is_admin = row["role"] == "admin"
@@ -347,8 +350,6 @@ def render_users_page(rows, current_user: dict, *, notice: str = "", error: str 
         role_label = "管理者" if is_admin else "メンバー"
         role_class = "green" if is_admin else "gray"
         is_self = row["email"] == current_user.get("email")
-        toggle_role = "member" if is_admin else "admin"
-        toggle_label = "メンバーに変更" if is_admin else "管理者に変更"
         status_badge = (
             '<span class="badge warn" style="margin-left:6px">承認待ち</span>'
             if is_pending else ""
@@ -365,12 +366,20 @@ def render_users_page(rows, current_user: dict, *, notice: str = "", error: str 
             </form>
             """
         else:
-            role_btn = "" if is_admin else f"""
-            <form method="post" action="/users/{row["id"]}/role">
-              <input type="hidden" name="role" value="admin">
-              <button class="secondary-btn slim" type="submit">管理者に変更</button>
-            </form>
-            """
+            if is_admin:
+                role_btn = f"""
+                <form method="post" action="/users/{row["id"]}/role">
+                  <input type="hidden" name="role" value="member">
+                  <button class="secondary-btn slim" type="submit">メンバーに変更</button>
+                </form>
+                """ if is_super_admin else ""
+            else:
+                role_btn = f"""
+                <form method="post" action="/users/{row["id"]}/role">
+                  <input type="hidden" name="role" value="admin">
+                  <button class="secondary-btn slim" type="submit">管理者に変更</button>
+                </form>
+                """
             actions = f"""
             {role_btn}
             <form method="post" action="/users/{row["id"]}/delete">
@@ -1587,44 +1596,6 @@ def render_tiktok_sync_panel(sync_settings, sync_date: str) -> str:
     )
     return _sync_panel_html("TikTok 広告 数値をキャンペーン一覧へ反映", status_label, action_html)
 
-
-def render_monthly_campaign_sync_panel(sync_settings, sync_date: str) -> str:
-    merged = merged_integration_settings(sync_settings)
-    has_required_settings = bool(
-        merged["meta_access_token"].strip()
-        and merged["google_service_account_file"].strip()
-        and merged["google_reports_folder_id"].strip()
-    )
-    status_label = (
-        "Meta と共有ドライブの設定は保存済みです。指定日の消化キャンペーンを月次スプシへ反映できます。"
-        if has_required_settings
-        else "同期前に設定画面で Meta アクセストークン、Google サービスアカウント JSON、共有ドライブ配下のレポートフォルダID を入れてください。"
-    )
-    action_html = (
-        f"""
-        <form class="sync-form" method="post" action="/accounts/meta/monthly-sync">
-          <label>対象日
-            <input type="date" name="report_date" value="{escape(sync_date)}">
-          </label>
-          <button class="primary-btn" type="submit">消化キャンペーンを月次スプシへ転記</button>
-        </form>
-        """
-        if has_required_settings
-        else '<a class="primary-btn" href="/settings">設定を入力する</a>'
-    )
-    return f"""
-    <section class="sync-panel">
-      <div>
-        <h2>Meta 消化キャンペーンを月次スプシへ転記</h2>
-        <p>{escape(status_label)}</p>
-        <div class="sync-meta">
-          <span>保存先フォルダ: {escape(merged["google_reports_folder_id"] or "未設定")}</span>
-          <span>初期タブ名: {escape(merged["google_monthly_report_sheet_tab_name"])}</span>
-        </div>
-      </div>
-      {action_html}
-    </section>
-    """
 
 
 

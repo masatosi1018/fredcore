@@ -154,7 +154,7 @@ class SyncJobsTest(unittest.TestCase):
             self.repository,
             settings=settings,
             project_root=Path(self.temp_dir.name),
-            report_date_input="2026-04-30",
+            report_date_input="2025-03-31",
             trigger_source="manual",
             meta_client_factory=FakeMetaCampaignClient,
             sheets_client_factory=FakeCampaignSheetsClient,

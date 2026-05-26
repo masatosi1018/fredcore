@@ -62,7 +62,7 @@ class ReportSheetsTest(unittest.TestCase):
     def test_ensure_monthly_report_sheet_creates_and_saves(self):
         result = ensure_monthly_report_sheet(
             self.repository,
-            month_key="2026-04",
+            month_key="2025-03",
             settings={
                 "google_service_account_file": "service.json",
                 "google_reports_folder_id": "folder-abc",
@@ -73,7 +73,7 @@ class ReportSheetsTest(unittest.TestCase):
         )
         self.assertTrue(result.created)
         self.assertEqual(result.spreadsheet_id, "sheet-created-123")
-        saved = self.repository.get_monthly_report_sheet("2026-04")
+        saved = self.repository.get_monthly_report_sheet("2025-03")
         self.assertIsNotNone(saved)
         self.assertEqual(saved["spreadsheet_id"], "sheet-created-123")
 

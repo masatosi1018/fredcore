@@ -1,10 +1,12 @@
 import io
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app import dashboard
 from app.admin_db import AdminRepository
+from app.auth import SESSION_COOKIE, hash_password
 
 
 class DashboardTest(unittest.TestCase):
@@ -12,6 +14,18 @@ class DashboardTest(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.repository = AdminRepository(Path(self.temp_dir.name) / "fredcore.db")
         self.repository.initialize()
+        self.repository.create_user(
+            email="admin@example.com",
+            name="Test Admin",
+            password_hash=hash_password("password123"),
+            role="admin",
+            status="有効",
+        )
+        user = self.repository.get_user_by_email("admin@example.com")
+        self.session_token = "test-session-token-abc123"
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).replace(microsecond=0).isoformat()
+        self.repository.create_user_session(self.session_token, int(user["id"]), expires_at)
+        self.session_cookie = f"{SESSION_COOKIE}={self.session_token}"
         self.repository.create_credential(
             platform="google",
             profile_name="Google OAuth User",
@@ -44,7 +58,7 @@ class DashboardTest(unittest.TestCase):
         dashboard.fetch_linkable_accounts = self.original_fetch_linkable_accounts
         self.temp_dir.cleanup()
 
-    def request(self, path: str, *, method: str = "GET", query: str = "", body: str = ""):
+    def request(self, path: str, *, method: str = "GET", query: str = "", body: str = "", auth: bool = True):
         payload = body.encode("utf-8")
         environ = {
             "PATH_INFO": path,
@@ -53,6 +67,8 @@ class DashboardTest(unittest.TestCase):
             "CONTENT_LENGTH": str(len(payload)),
             "wsgi.input": io.BytesIO(payload),
         }
+        if auth:
+            environ["HTTP_COOKIE"] = self.session_cookie
         captured = {}
 
         def start_response(status, headers):
@@ -150,7 +166,7 @@ class DashboardTest(unittest.TestCase):
 
     def test_health_endpoint_surfaces_repository_initialization_errors(self):
         dashboard.ensure_repository_ready = lambda: (_ for _ in ()).throw(RuntimeError("db init failed"))
-        response = self.request("/api/health")
+        response = self.request("/api/health", auth=False)
         self.assertEqual(response["status"], "500 Internal Server Error")
         self.assertIn('"ok": false', response["body"])
         self.assertIn('"database_backend": "sqlite"', response["body"])

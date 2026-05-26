@@ -128,19 +128,19 @@ class CampaignSyncTest(unittest.TestCase):
                 "report_timezone": "Asia/Tokyo",
             },
             project_root=Path(self.temp_dir.name),
-            report_date_input="2026-04-30",
+            report_date_input="2025-03-31",
             meta_client_factory=FakeMetaCampaignClient,
             sheets_client_factory=FakeCampaignSheetsClient,
             sheet_manager_factory=FakeSheetManager,
             repository=self.repository,
         )
-        self.assertEqual(result.report_date, "2026-04-30")
-        self.assertEqual(result.month_key, "2026-04")
+        self.assertEqual(result.report_date, "2025-03-31")
+        self.assertEqual(result.month_key, "2025-03")
         self.assertEqual(result.account_count, 1)
         self.assertEqual(result.row_count, 1)
         self.assertEqual(result.appended_count, 1)
         self.assertTrue(result.created_spreadsheet)
-        saved = self.repository.get_monthly_report_sheet("2026-04")
+        saved = self.repository.get_monthly_report_sheet("2025-03")
         self.assertIsNotNone(saved)
         self.assertEqual(saved["spreadsheet_id"], "monthly-sheet-1")
 
@@ -158,7 +158,7 @@ class CampaignSyncTest(unittest.TestCase):
                 "report_timezone": "Asia/Tokyo",
             },
             project_root=Path(self.temp_dir.name),
-            report_date_input="2026-04-30",
+            report_date_input="2025-03-31",
             meta_client_factory=FakeMetaCampaignClient,
             sheets_client_factory=FakeCampaignSheetsClient,
             repository=self.repository,
@@ -166,7 +166,7 @@ class CampaignSyncTest(unittest.TestCase):
         self.assertEqual(result.spreadsheet_url, "https://docs.google.com/spreadsheets/d/fixed-sheet-1/edit")
         self.assertFalse(result.created_spreadsheet)
         self.assertEqual(FakeMetaCampaignClient.used_tokens, ["oauth-token-1"])
-        self.assertIsNone(self.repository.get_monthly_report_sheet("2026-04"))
+        self.assertIsNone(self.repository.get_monthly_report_sheet("2025-03"))
 
 
 if __name__ == "__main__":

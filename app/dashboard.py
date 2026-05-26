@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Dict, Iterable, Optional
 from urllib.parse import parse_qs, urlencode
 from wsgiref.simple_server import make_server
-from wsgiref.util import setup_testing_defaults
 
 from app.account_linking import find_discoverable_accounts, list_discoverable_accounts
 from app.admin_db import AdminRepository, DEFAULT_PLATFORM, SUPPORTED_PLATFORMS
@@ -48,6 +47,7 @@ from app.auth import (
     verify_password,
 )
 from app.admin_views import (
+    SUPER_ADMIN_EMAIL,
     render_accounts_page,
     render_credentials_page,
     render_login_page,
@@ -116,7 +116,7 @@ def get_current_user(environ) -> Optional[Dict]:
     if str(row["expires_at"]) < now:
         REPOSITORY.delete_user_session(token)
         return None
-    if str(row.get("status", "有効")) != "有効":
+    if str(row["status"]) != "有効":
         return None
     return {
         "id": row["user_id"],
@@ -580,7 +580,6 @@ def _sync_range_notice(platform_label: str, date_range: list, total: dict, last_
 
 
 def application(environ, start_response):
-    setup_testing_defaults(environ)
     path = environ.get("PATH_INFO", "/")
     method = environ.get("REQUEST_METHOD", "GET").upper()
     platform = active_platform(environ)
@@ -703,10 +702,15 @@ def application(environ, start_response):
                     role="member",
                     status="承認待ち",
                 )
-            except Exception:
+            except Exception as exc:
+                err_str = str(exc).lower()
+                if "unique" in err_str or "already exists" in err_str or "duplicate" in err_str:
+                    display_error = "このメールアドレスはすでに登録されています。"
+                else:
+                    display_error = f"アカウントの作成に失敗しました。({exc})"
                 return respond_html(
                     start_response,
-                    render_register_page(error="このメールアドレスはすでに登録されています。", name=name, email=email),
+                    render_register_page(error=display_error, name=name, email=email),
                 )
             return respond_html(start_response, render_register_page(
                 notice="アカウントを作成しました。管理者の承認をお待ちください。"
@@ -1141,7 +1145,7 @@ def application(environ, start_response):
                 start_response,
                 "/credentials",
                 platform="meta",
-                error="Meta OAuth がキャンセルされました。",
+                error=f"Meta OAuth がキャンセルされました。({message})" if message else "Meta OAuth がキャンセルされました。",
             )
         if not state or not code:
             return redirect_to(
@@ -1227,7 +1231,10 @@ def application(environ, start_response):
         return redirect(start_response, authorization_url)
 
     if path.startswith("/credentials/") and path.endswith("/reauth") and method == "POST":
-        credential_id = int(path.split("/")[2])
+        try:
+            credential_id = int(path.split("/")[2])
+        except (ValueError, IndexError):
+            return redirect_to(start_response, "/credentials", platform=platform, error="不正なリクエストです。")
         credential = REPOSITORY.get_credential(credential_id)
         if credential is None or str(credential["auth_type"] or "") != "oauth":
             return redirect_to(
@@ -1248,7 +1255,10 @@ def application(environ, start_response):
         return redirect(start_response, authorization_url)
 
     if path.startswith("/credentials/") and path.endswith("/delete") and method == "POST":
-        credential_id = int(path.split("/")[2])
+        try:
+            credential_id = int(path.split("/")[2])
+        except (ValueError, IndexError):
+            return redirect_to(start_response, "/credentials", platform=platform, error="不正なリクエストです。")
         REPOSITORY.delete_credential(credential_id)
         return redirect_to(
             start_response,
@@ -1272,7 +1282,10 @@ def application(environ, start_response):
         )
 
     if path.startswith("/accounts/") and path.endswith("/delete") and method == "POST":
-        account_id = int(path.split("/")[2])
+        try:
+            account_id = int(path.split("/")[2])
+        except (ValueError, IndexError):
+            return redirect_to(start_response, "/accounts", platform=platform, error="不正なリクエストです。")
         REPOSITORY.delete_account(account_id)
         return redirect_to(
             start_response,
@@ -1283,7 +1296,10 @@ def application(environ, start_response):
         )
 
     if path.startswith("/report-sheets/") and path.endswith("/delete") and method == "POST":
-        sheet_id = int(path.split("/")[2])
+        try:
+            sheet_id = int(path.split("/")[2])
+        except (ValueError, IndexError):
+            return redirect_to(start_response, "/report-sheets", error="不正なリクエストです。")
         REPOSITORY.delete_monthly_report_sheet(sheet_id)
         return redirect_to(
             start_response,
@@ -1359,40 +1375,25 @@ def application(environ, start_response):
 
     if path == "/accounts/meta/monthly-sync" and method == "POST":
         form = parse_form(environ)
+        settings = get_config()
+        date_range, range_error = _parse_date_range(form)
+        if range_error:
+            return redirect_to(start_response, "/accounts", platform="meta", error=range_error)
+        total = _zero_sync_totals()
+        last_result = None
         try:
-            job = run_meta_monthly_sync_job(
-                settings=get_config(),
-                repository=REPOSITORY,
-                project_root=PROJECT_ROOT,
-                report_date_input=form.get("report_date", "").strip(),
-                trigger_source="manual",
-            )
+            for d in date_range:
+                job = run_meta_monthly_sync_job(
+                    settings=settings, repository=REPOSITORY, project_root=PROJECT_ROOT,
+                    report_date_input=d, trigger_source="manual",
+                )
+                last_result = job.result
+                _add_sync_totals(total, last_result)
         except Exception as exc:
-            return redirect_to(
-                start_response,
-                "/accounts",
-                platform="meta",
-                report_date=form.get("report_date", "").strip(),
-                error=str(exc),
-            )
-
-        result = job.result
-        created_message = (
-            f" 月次スプシを新規作成: {result.spreadsheet_title}"
-            if result.created_spreadsheet
-            else ""
-        )
-        return redirect_to(
-            start_response,
-            "/accounts",
-            platform="meta",
-            report_date=result.report_date,
-            notice=(
-                f"{result.report_date} の Meta 消化キャンペーンを月次スプシへ転記しました。"
-                f" 対象アカウント {result.account_count}件 / 行数 {result.row_count}件 / 更新 {result.updated_count}件 / 追加 {result.appended_count}件。"
-                f"{created_message}"
-            ),
-        )
+            return redirect_to(start_response, "/accounts", platform="meta", error=str(exc))
+        notice = _sync_range_notice("Meta", date_range, total, last_result)
+        return redirect_to(start_response, "/accounts", platform="meta",
+                           report_date=date_range[-1], notice=notice)
 
     if path == "/jobs/meta/monthly-sync" and method in {"GET", "POST"}:
         settings = get_config()
@@ -1865,11 +1866,13 @@ def application(environ, start_response):
         target = REPOSITORY.get_user_by_id(user_id)
         if target and target["email"] == current_user.get("email"):
             return redirect_to(start_response, "/users", error="自分自身の役割は変更できません。")
-        if target and target["role"] == "admin":
-            return redirect_to(start_response, "/users", error="管理者の役割は変更できません。")
         form = parse_form(environ)
         new_role = form.get("role", "").strip()
-        if new_role == "admin":
+        if new_role == "member":
+            if current_user.get("email") != SUPER_ADMIN_EMAIL:
+                return redirect_to(start_response, "/users", error="管理者からメンバーへの降格は最高権限者のみ実行できます。")
+            REPOSITORY.update_user_role(user_id, "member")
+        elif new_role == "admin":
             REPOSITORY.update_user_role(user_id, "admin")
         return redirect_to(start_response, "/users", notice="役割を変更しました。")
 
