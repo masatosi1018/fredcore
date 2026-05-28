@@ -2145,11 +2145,13 @@ def render_sync_runs_page(rows, *, notice: str = "", error: str = "", current_us
     for row in rows:
         status_class = "green" if row["status"] == "成功" else "warn" if row["status"] == "実行中" else "red"
         trigger_label = {"manual": "手動", "cron": "自動"}.get(str(row["trigger_source"]), str(row["trigger_source"]))
-        summary = (
-            f"アカウント {row['account_count']}件 ／ 行 {row['row_count']}件 ／ 更新 {row['updated_count']}件 ／ 追加 {row['appended_count']}件"
-            if row["status"] == "成功"
-            else row["error_message"] or "-"
-        )
+        if row["status"] == "成功":
+            summary = f"アカウント {row['account_count']}件 ／ 行 {row['row_count']}件 ／ 更新 {row['updated_count']}件 ／ 追加 {row['appended_count']}件"
+            if row["error_message"]:
+                skipped = len([l for l in str(row["error_message"]).splitlines() if l.strip()])
+                summary += f" ／ スキップ {skipped}件"
+        else:
+            summary = row["error_message"] or "-"
         sheet_html = (
             f'<a class="text-link" href="{escape(row["spreadsheet_url"])}" target="_blank" rel="noreferrer">↗ {escape(row["month_key"] or "開く")}</a>'
             if row["spreadsheet_url"]
@@ -2166,7 +2168,7 @@ def render_sync_runs_page(rows, *, notice: str = "", error: str = "", current_us
               <td class="sync-col-month">{escape(str(row["month_key"] or ""))}</td>
               <td class="sync-col-status"><span class="badge {status_class}">{escape(row["status"])}</span></td>
               <td class="sync-col-sheet">{sheet_html}</td>
-              <td class="sync-col-result">{escape(summary)}</td>
+              <td class="sync-col-result" title="{escape(str(row['error_message'] or ''))}">{escape(summary)}</td>
             </tr>
             """
         )

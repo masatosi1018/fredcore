@@ -68,6 +68,7 @@ def run_meta_monthly_sync_job(
         appended_count=result.appended_count,
         spreadsheet_url=result.spreadsheet_url,
         spreadsheet_title=result.spreadsheet_title,
+        error_message="\n".join(result.account_errors) if result.account_errors else "",
     )
     return SyncJobResult(sync_run_id=sync_run_id, result=result)
 
@@ -121,6 +122,7 @@ def run_google_ads_monthly_sync_job(
         appended_count=result.appended_count,
         spreadsheet_url=result.spreadsheet_url,
         spreadsheet_title=result.spreadsheet_title,
+        error_message="\n".join(result.account_errors) if result.account_errors else "",
     )
     return SyncJobResult(sync_run_id=sync_run_id, result=result)
 
@@ -174,5 +176,6 @@ def run_tiktok_monthly_sync_job(
         appended_count=result.appended_count,
         spreadsheet_url=result.spreadsheet_url,
         spreadsheet_title=result.spreadsheet_title,
+        error_message="\n".join(result.account_errors) if result.account_errors else "",
     )
     return SyncJobResult(sync_run_id=sync_run_id, result=result)

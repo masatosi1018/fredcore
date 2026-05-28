@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Mapping, Optional, Sequence
+from typing import Callable, List, Mapping, Optional, Sequence
 
 from app.config import ConfigError, normalize_account_id
 from app.oauth_clients import OAuthAppConfig, refresh_google_access_token
@@ -150,6 +150,10 @@ class MonthlyCampaignSyncResult:
     appended_count: int
     spreadsheet_url: str
     spreadsheet_title: str
+    account_errors: List[str] = None  # type: ignore[assignment]
+
+    def __post_init__(self):
+        object.__setattr__(self, "account_errors", self.account_errors or [])
     created_spreadsheet: bool
 
 
@@ -198,6 +202,7 @@ def sync_meta_campaigns_to_monthly_sheet(
     keyed_rows = []
     client_by_token = {}
     account_count = 0
+    account_errors: List[str] = []
     for account_row in active_accounts:
         raw_account_id = str(account_row["account_identifier"]).strip()
         if not raw_account_id:
@@ -220,7 +225,9 @@ def sync_meta_campaigns_to_monthly_sheet(
                 account_id=account_id,
                 report_date=report_date,
             )
-        except Exception:
+        except Exception as exc:
+            account_name = str(account_row["account_name"] or raw_account_id).strip()
+            account_errors.append(f"{account_name}: {exc}")
             continue
         account_count += 1
         for record in records:
@@ -265,6 +272,7 @@ def sync_meta_campaigns_to_monthly_sheet(
         spreadsheet_url=target_sheet.spreadsheet_url,
         spreadsheet_title=target_sheet.spreadsheet_title,
         created_spreadsheet=target_sheet.created_spreadsheet,
+        account_errors=account_errors,
     )
 
 
@@ -340,6 +348,7 @@ def sync_google_ads_campaigns_to_monthly_sheet(
 
     keyed_rows = []
     account_count = 0
+    account_errors: List[str] = []
     for account_row in active_accounts:
         raw_customer_id = str(account_row["account_identifier"]).strip().replace("-", "")
         if not raw_customer_id:
@@ -366,7 +375,9 @@ def sync_google_ads_campaigns_to_monthly_sheet(
                 customer_id=raw_customer_id,
                 report_date=report_date,
             )
-        except Exception:
+        except Exception as exc:
+            account_name = str(account_row["account_name"] or raw_customer_id)
+            account_errors.append(f"{account_name}: {exc}")
             continue
         account_count += 1
         for record in records:
@@ -410,6 +421,7 @@ def sync_google_ads_campaigns_to_monthly_sheet(
         spreadsheet_url=target_sheet.spreadsheet_url,
         spreadsheet_title=target_sheet.spreadsheet_title,
         created_spreadsheet=target_sheet.created_spreadsheet,
+        account_errors=account_errors,
     )
 
 
@@ -457,6 +469,7 @@ def sync_tiktok_campaigns_to_monthly_sheet(
     keyed_rows = []
     client_by_token: dict = {}
     account_count = 0
+    account_errors: List[str] = []
     for account_row in active_accounts:
         advertiser_id = str(account_row["account_identifier"]).strip()
         if not advertiser_id:
@@ -475,7 +488,9 @@ def sync_tiktok_campaigns_to_monthly_sheet(
                 report_date=report_date,
                 advertiser_name=str(account_row.get("account_name") or advertiser_id),
             )
-        except Exception:
+        except Exception as exc:
+            account_name = str(account_row["account_name"] or advertiser_id)
+            account_errors.append(f"{account_name}: {exc}")
             continue
         account_count += 1
         for record in records:
@@ -519,4 +534,5 @@ def sync_tiktok_campaigns_to_monthly_sheet(
         spreadsheet_url=target_sheet.spreadsheet_url,
         spreadsheet_title=target_sheet.spreadsheet_title,
         created_spreadsheet=target_sheet.created_spreadsheet,
+        account_errors=account_errors,
     )
