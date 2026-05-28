@@ -27,7 +27,6 @@ GOOGLE_OAUTH_SCOPES = (
 
 META_DEFAULT_OAUTH_SCOPES = (
     "ads_read",
-    "ads_management",
     "business_management",
 )
 
