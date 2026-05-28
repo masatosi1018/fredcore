@@ -215,10 +215,13 @@ def sync_meta_campaigns_to_monthly_sheet(
                 graph_api_version=config.meta_graph_api_version,
                 timeout_seconds=config.meta_request_timeout_seconds,
             )
-        records = client_by_token[access_token].fetch_account_daily_campaigns(
-            account_id=account_id,
-            report_date=report_date,
-        )
+        try:
+            records = client_by_token[access_token].fetch_account_daily_campaigns(
+                account_id=account_id,
+                report_date=report_date,
+            )
+        except Exception:
+            continue
         account_count += 1
         for record in records:
             if record.spend <= 0:
@@ -358,10 +361,13 @@ def sync_google_ads_campaigns_to_monthly_sheet(
             developer_token=config.google_ads_developer_token,
             login_customer_id=login_customer_id,
         )
-        records = client.fetch_account_daily_campaigns(
-            customer_id=raw_customer_id,
-            report_date=report_date,
-        )
+        try:
+            records = client.fetch_account_daily_campaigns(
+                customer_id=raw_customer_id,
+                report_date=report_date,
+            )
+        except Exception:
+            continue
         account_count += 1
         for record in records:
             if record.spend <= 0:
@@ -463,11 +469,14 @@ def sync_tiktok_campaigns_to_monthly_sheet(
             )
         if access_token not in client_by_token:
             client_by_token[access_token] = tiktok_client_class(access_token=access_token)
-        records = client_by_token[access_token].fetch_account_daily_campaigns(
-            advertiser_id=advertiser_id,
-            report_date=report_date,
-            advertiser_name=str(account_row.get("account_name") or advertiser_id),
-        )
+        try:
+            records = client_by_token[access_token].fetch_account_daily_campaigns(
+                advertiser_id=advertiser_id,
+                report_date=report_date,
+                advertiser_name=str(account_row.get("account_name") or advertiser_id),
+            )
+        except Exception:
+            continue
         account_count += 1
         for record in records:
             if record.spend <= 0:
