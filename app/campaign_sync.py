@@ -150,11 +150,11 @@ class MonthlyCampaignSyncResult:
     appended_count: int
     spreadsheet_url: str
     spreadsheet_title: str
+    created_spreadsheet: bool
     account_errors: List[str] = None  # type: ignore[assignment]
 
     def __post_init__(self):
         object.__setattr__(self, "account_errors", self.account_errors or [])
-    created_spreadsheet: bool
 
 
 def sync_meta_campaigns_to_monthly_sheet(
