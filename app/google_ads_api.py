@@ -187,7 +187,7 @@ class GoogleAdsClient:
     ) -> List[CampaignPerformanceRecord]:
         clean_id = customer_id.replace("-", "").strip()
         query = _CAMPAIGN_QUERY.format(date=report_date)
-        fetched_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         records: List[CampaignPerformanceRecord] = []
         next_page = ""
         while True:
